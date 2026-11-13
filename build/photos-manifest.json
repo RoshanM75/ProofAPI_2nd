@@ -1,0 +1,149 @@
+{
+  "fetched": "2026-11-13T13:46:45.129Z",
+  "photos": [
+    {
+      "file": "assets/photos/afforest-01.jpg",
+      "action": "afforest",
+      "title": "Volunteers enjoy planting trees.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Volunteers_enjoy_planting_trees.jpg/960px-Volunteers_enjoy_planting_trees.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Volunteers_enjoy_planting_trees.jpg",
+      "artist": "Hillebrand Steve, U.S. Fish and Wildlife Service",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 2336,
+      "height": 3504
+    },
+    {
+      "file": "assets/photos/afforest-02.jpg",
+      "action": "afforest",
+      "title": "Volunteer Tree Planting 120802-F-OS776-021.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cd/Volunteer_Tree_Planting_120802-F-OS776-021.jpg/960px-Volunteer_Tree_Planting_120802-F-OS776-021.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Volunteer_Tree_Planting_120802-F-OS776-021.jpg",
+      "artist": "Airman 1st Class Christopher Tam",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 4256,
+      "height": 2832
+    },
+    {
+      "file": "assets/photos/solar-01.jpg",
+      "action": "solar",
+      "title": "Rooftop solar panels in Caldicot - geograph.org.uk - 6388281.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Rooftop_solar_panels_in_Caldicot_-_geograph.org.uk_-_6388281.jpg/960px-Rooftop_solar_panels_in_Caldicot_-_geograph.org.uk_-_6388281.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Rooftop_solar_panels_in_Caldicot_-_geograph.org.uk_-_6388281.jpg",
+      "artist": "Jaggery",
+      "license": "CC BY-SA 2.0",
+      "licUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+      "width": 1600,
+      "height": 1057
+    },
+    {
+      "file": "assets/photos/solar-02.jpg",
+      "action": "solar",
+      "title": "Rooftop solar panels, Gwehelog - geograph.org.uk - 7018757.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ae/Rooftop_solar_panels%2C_Gwehelog_-_geograph.org.uk_-_7018757.jpg/960px-Rooftop_solar_panels%2C_Gwehelog_-_geograph.org.uk_-_7018757.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Rooftop_solar_panels,_Gwehelog_-_geograph.org.uk_-_7018757.jpg",
+      "artist": "Jaggery",
+      "license": "CC BY-SA 2.0",
+      "licUrl": "https://creativecommons.org/licenses/by-sa/2.0",
+      "width": 964,
+      "height": 1024
+    },
+    {
+      "file": "assets/photos/wetland-01.jpg",
+      "action": "wetland",
+      "title": "Wetland restoration in Australia.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/86/Wetland_restoration_in_Australia.jpg/960px-Wetland_restoration_in_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Wetland_restoration_in_Australia.jpg",
+      "artist": "Nick carson at English Wikipedia",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 2272,
+      "height": 1704
+    },
+    {
+      "file": "assets/photos/wetland-02.jpg",
+      "action": "wetland",
+      "title": "Wetland restoration under the Wetlands Reserve Program in Texas (24743607259).jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Wetland_restoration_under_the_Wetlands_Reserve_Program_in_Texas_%2824743607259%29.jpg/960px-Wetland_restoration_under_the_Wetlands_Reserve_Program_in_Texas_%2824743607259%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Wetland_restoration_under_the_Wetlands_Reserve_Program_in_Texas_(24743607259).jpg",
+      "artist": "USDA NRCS Texas",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 2240,
+      "height": 1488
+    },
+    {
+      "file": "assets/photos/ev-01.jpg",
+      "action": "ev",
+      "title": "Car2Go Charging Station Stuttgart 2013 01.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/Car2Go_Charging_Station_Stuttgart_2013_01.jpg/960px-Car2Go_Charging_Station_Stuttgart_2013_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Car2Go_Charging_Station_Stuttgart_2013_01.jpg",
+      "artist": "Julian Herzog (Website)",
+      "license": "CC BY 4.0",
+      "licUrl": "https://creativecommons.org/licenses/by/4.0",
+      "width": 3400,
+      "height": 2258
+    },
+    {
+      "file": "assets/photos/ev-02.jpg",
+      "action": "ev",
+      "title": "PisaEnelXChargingStation.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/PisaEnelXChargingStation.jpg/960px-PisaEnelXChargingStation.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:PisaEnelXChargingStation.jpg",
+      "artist": "Daniele Napolitano",
+      "license": "CC BY-SA 4.0",
+      "licUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+      "width": 2976,
+      "height": 3968
+    },
+    {
+      "file": "assets/photos/cleanup-01.jpg",
+      "action": "cleanup",
+      "title": "Beaches cleanup volunteers (16749394444).jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Beaches_cleanup_volunteers_%2816749394444%29.jpg/960px-Beaches_cleanup_volunteers_%2816749394444%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Beaches_cleanup_volunteers_(16749394444).jpg",
+      "artist": "Olympic National Park",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 1704,
+      "height": 2272
+    },
+    {
+      "file": "assets/photos/cleanup-02.jpg",
+      "action": "cleanup",
+      "title": "Oregon-beach-cleanup-ocean-blue-project-volunteers.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/Oregon-beach-cleanup-ocean-blue-project-volunteers.jpg/960px-Oregon-beach-cleanup-ocean-blue-project-volunteers.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Oregon-beach-cleanup-ocean-blue-project-volunteers.jpg",
+      "artist": "Ocean Blue Project, Inc.",
+      "license": "CC BY-SA 4.0",
+      "licUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+      "width": 7952,
+      "height": 5304
+    },
+    {
+      "file": "assets/photos/retrofit-01.jpg",
+      "action": "retrofit",
+      "title": "CSIRO ScienceImage 2175 Installing Insulation Batts.jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0c/CSIRO_ScienceImage_2175_Installing_Insulation_Batts.jpg/960px-CSIRO_ScienceImage_2175_Installing_Insulation_Batts.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:CSIRO_ScienceImage_2175_Installing_Insulation_Batts.jpg",
+      "artist": "Tracey Nicholls, CSIRO",
+      "license": "CC BY 3.0",
+      "licUrl": "https://creativecommons.org/licenses/by/3.0",
+      "width": 2309,
+      "height": 2657
+    },
+    {
+      "file": "assets/photos/retrofit-02.jpg",
+      "action": "retrofit",
+      "title": "Installing Insulation & Roof Paneling (8938297).jpg",
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7d/Installing_Insulation_%26_Roof_Paneling_%288938297%29.jpg/960px-Installing_Insulation_%26_Roof_Paneling_%288938297%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "page": "https://commons.wikimedia.org/wiki/File:Installing_Insulation_%26_Roof_Paneling_(8938297).jpg",
+      "artist": "U.S. Navy photo by Petty Officer 3rd Class Matthew Noles",
+      "license": "Public domain",
+      "licUrl": "",
+      "width": 6000,
+      "height": 4000
+    }
+  ]
+}

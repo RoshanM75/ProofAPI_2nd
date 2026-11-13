@@ -1,8 +1,8 @@
 'use strict';
 /* ============================================================
    Proof API · 应用层(Team P05)
-   总览 / 审核队列 / 重复检测 / 分析 / SNOOP 智能体
-   演示交互:通过/驳回实时更新状态与总览;SNOOP 规则引擎调查。
+   总览 / 审核队列 / 重复检测 / 分析 / 智能体
+   演示交互:通过/驳回实时更新状态与总览;智能体规则引擎调查。
    ============================================================ */
 
 const $ = s => document.querySelector(s);
@@ -69,8 +69,8 @@ function actTag(key){
 
 function photoEl(sub, cls){
   const d = document.createElement('div');
-  d.className = 'photo' + (cls ? ' ' + cls : '');
-  d.innerHTML = photoSvg(sub);
+  d.className = 'photo' + (cls ? ' ' + cls : '') + (sub.dup ? ' dup-variant' : '');
+  d.innerHTML = photoHtml(sub);
   return d;
 }
 
@@ -513,18 +513,18 @@ function openDrawer(id){
   pn.appendChild(verdict);
 
   if(s.status !== 'verified'){
-    const snoopBtn = document.createElement('button');
-    snoopBtn.className = 'btn btn-snoop';
-    snoopBtn.textContent = '✦ ' + t('qc.snoop');
-    snoopBtn.addEventListener('click', () => {
+    const agentBtn = document.createElement('button');
+    agentBtn.className = 'btn btn-agent';
+    agentBtn.textContent = '✦ ' + t('qc.agent');
+    agentBtn.addEventListener('click', () => {
       closeDrawer();
-      switchTab('snoop');
-      setTimeout(() => snoopAsk(t('snoop.investigating', { id: s.id })), 350);
+      switchTab('agent');
+      setTimeout(() => agentAsk(t('agent.investigating', { id: s.id })), 350);
     });
-    pn.appendChild(snoopBtn);
+    pn.appendChild(agentBtn);
     const hintP = document.createElement('p');
     hintP.className = 'drawer-hint';
-    hintP.textContent = t('drawer.snoop.hint');
+    hintP.textContent = t('drawer.agent.hint');
     pn.appendChild(hintP);
   }
   const noteP = document.createElement('p');
@@ -554,25 +554,29 @@ function buildDup(){
 
   const kpi = document.createElement('div');
   kpi.className = 'kpi-grid';
-  const K = PROOF.kpis();
-  const groups = PROOF.dupGroups();
-  const dups = PROOF.submissions.filter(s => s.dup);
-  const dupRate = fmtNum(dups.length / PROOF.submissions.length * 100, 1);
-  const tiles = [
-    { label: t('dup.kpi.groups'), value: fmtNum(groups.length, 0), delta: t('dup.kpi.groupsNote'), deltaIcon: '⚠', deltaCls: 'warn' },
-    { label: t('dup.kpi.involved'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.involvedNote', { p: dupRate }), deltaIcon: '⏳', deltaCls: 'warn' },
-    { label: t('dup.kpi.blocked'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.blockedNote'), deltaIcon: '⛔', deltaCls: 'bad' },
-    { label: t('dup.kpi.precision'), value: '96.2%', delta: t('dup.kpi.precisionNote'), deltaIcon: '✓', deltaCls: 'good' }
-  ];
-  tiles.forEach(o => kpi.appendChild(statTile(o)));
   sec.appendChild(kpi);
 
   const list = document.createElement('div');
   list.className = 'dup-list';
   sec.appendChild(list);
 
+  const renderKpis = () => {
+    kpi.innerHTML = '';
+    const dups = PROOF.submissions.filter(s => s.dup);
+    const dupRate = fmtNum(dups.length / PROOF.submissions.length * 100, 1);
+    const tiles = [
+      { label: t('dup.kpi.groups'), value: fmtNum(PROOF.dupGroups().length, 0), delta: t('dup.kpi.groupsNote'), deltaIcon: '⚠', deltaCls: 'warn' },
+      { label: t('dup.kpi.involved'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.involvedNote', { p: dupRate }), deltaIcon: '⏳', deltaCls: 'warn' },
+      { label: t('dup.kpi.blocked'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.blockedNote'), deltaIcon: '⛔', deltaCls: 'bad' },
+      { label: t('dup.kpi.precision'), value: '96.2%', delta: t('dup.kpi.precisionNote'), deltaIcon: '✓', deltaCls: 'good' }
+    ];
+    tiles.forEach(o => kpi.appendChild(statTile(o)));
+  };
+
   const render = () => {
+    renderKpis();
     list.innerHTML = '';
+    const groups = PROOF.dupGroups(); /* 每次渲染重算,支持会话提交的新增重复组 */
     groups.forEach(g => {
       const state = DUP_STATE[g.id];
       const item = document.createElement('div');
@@ -650,14 +654,17 @@ function buildDup(){
       list.appendChild(item);
     });
 
-    const how = card(sec, t('dup.how'), t('dup.how.text'));
-    how.root.style.marginTop = '14px';
-    how.body.innerHTML = '';
-    const p = document.createElement('p');
-    p.className = 'summary-text';
-    p.textContent = t('dup.how.text');
-    how.body.appendChild(p);
   };
+
+  /* 检测原理说明卡(仅构建一次,render 只刷新列表与 KPI) */
+  const how = card(sec, t('dup.how'), null);
+  how.root.style.marginTop = '14px';
+  const hp = document.createElement('p');
+  hp.className = 'summary-text';
+  hp.textContent = t('dup.how.text');
+  how.body.appendChild(hp);
+
+  window.__renderDup = render;
   render();
 }
 
@@ -745,25 +752,25 @@ function buildAnalytics(){
   mCard.body.appendChild(mg);
   const mNote = document.createElement('p');
   mNote.className = 'summary-note';
-  mNote.textContent = t('drawer.snoop.hint');
+  mNote.textContent = t('drawer.agent.hint');
   mCard.body.appendChild(mNote);
 }
 
 /* ============================================================
-   SNOOP 智能体
+   智能体
    ============================================================ */
-function snoopSteps(sub){
+function agentSteps(sub){
   const dup = sub.dup;
   const city = PROOF.city(sub.city);
   const steps = [];
 
   steps.push({
-    icon: '📋', title: 'snoop.step.read', chips: ['EXIF.read', 'GPS.resolve', 'SHA-256'],
+    icon: '📋', title: 'agent.step.read', chips: ['EXIF.read', 'GPS.resolve', 'SHA-256'],
     text: (LANG === 'zh' ? '读取 ' : 'Reading ') + sub.id + ':设备 ' + sub.device + ',GPS ' + t(sub.gpsOk ? 'drawer.gps.ok' : 'drawer.gps.bad') + ',指纹 ' + sub.hash + ',申报地点 ' + lb(city) + '(' + lb(city.country) + ')。'
   });
 
   steps.push({
-    icon: '🔬', title: 'snoop.step.forensics', chips: ['ELA.analyze', 'NoiseMap.diff', 'JpegQC.probe'],
+    icon: '🔬', title: 'agent.step.forensics', chips: ['ELA.analyze', 'NoiseMap.diff', 'JpegQC.probe'],
     text: sub.subs.auth < 70
       ? (LANG === 'zh' ? 'ELA 误差级分析检出重压缩痕迹,噪声分布与设备型号特征不一致;真实性得分 ' + sub.subs.auth + ',低于 70,存在后期加工风险。' : 'ELA analysis detects re-compression artifacts; noise distribution mismatches the device profile. Authenticity ' + sub.subs.auth + ' (< 70) — manipulation risk.')
       : (LANG === 'zh' ? 'ELA 与噪声谱分析未发现合成或重压缩痕迹,边缘梯度连续;真实性得分 ' + sub.subs.auth + '。' : 'ELA and noise-spectrum analysis show no compositing or re-compression; edge gradients are continuous. Authenticity ' + sub.subs.auth + '.')
@@ -783,7 +790,7 @@ function snoopSteps(sub){
       ? '坐标位于 ' + lb(city) + ' 已登记行动区域(' + city.grid + '),地理一致性得分 ' + sub.subs.loc + ',与申报位置吻合。'
       : 'Coordinates sit inside ' + lb(city) + '\'s registered action zone (' + city.grid + '); geolocation consistency ' + sub.subs.loc + ' — matches the claim.';
   }
-  steps.push({ icon: '📍', title: 'snoop.step.geo', chips: ['GeoRegistry.lookup', 'GridMatch.score', 'MapTiles.probe'], text: geoTxt });
+  steps.push({ icon: '📍', title: 'agent.step.geo', chips: ['GeoRegistry.lookup', 'GridMatch.score', 'MapTiles.probe'], text: geoTxt });
 
   const regN = 40 + (strHash(sub.id) % 160);
   let regTxt;
@@ -796,7 +803,7 @@ function snoopSteps(sub){
       ? '登记库本季度该网格已登记 ' + regN + ' 个同类行动;本次提交与既有条目不重叠,未见重复登记。'
       : 'The registry shows ' + regN + ' similar actions registered in this grid this quarter; this submission overlaps none of them.';
   }
-  steps.push({ icon: '🗂️', title: 'snoop.step.registry', chips: ['ClimateRegistry.query', 'pHash.search'], text: regTxt });
+  steps.push({ icon: '🗂️', title: 'agent.step.registry', chips: ['ClimateRegistry.query', 'pHash.search'], text: regTxt });
 
   let verdict;
   if(dup){
@@ -834,22 +841,22 @@ function snoopSteps(sub){
   return { steps, verdict };
 }
 
-let SNOOP_BUSY = false;
+let AGENT_BUSY = false;
 
-function buildSnoop(){
-  const sec = $('#tab-snoop');
+function buildAgent(){
+  const sec = $('#tab-agent');
   sec.innerHTML = '';
 
   /* 流水线 */
-  const pipeCard = card(sec, t('snoop.pipe.title'), t('snoop.pipe.sub'));
+  const pipeCard = card(sec, t('agent.pipe.title'), t('agent.pipe.sub'));
   const pipe = document.createElement('div');
   pipe.className = 'pipe';
-  const nodes = ['snoop.pipe.1', 'snoop.pipe.2', 'snoop.pipe.3', 'snoop.pipe.4', 'snoop.pipe.5', 'snoop.pipe.6'];
+  const nodes = ['agent.pipe.1', 'agent.pipe.2', 'agent.pipe.3', 'agent.pipe.4', 'agent.pipe.5', 'agent.pipe.6'];
   nodes.forEach((k, i) => {
     const n = document.createElement('div');
-    n.className = 'pipe-node' + (i === 4 ? ' snoop-node' : '');
+    n.className = 'pipe-node' + (i === 4 ? ' agent-node' : '');
     n.innerHTML = '<span class="pipe-step">' + (i + 1) + '</span><b>' + t(k) + '</b>' +
-      (i === 4 ? '<em>' + t('snoop.pipe.tag') + '</em>' : '');
+      (i === 4 ? '<em>' + t('agent.pipe.tag') + '</em>' : '');
     pipe.appendChild(n);
     if(i < nodes.length - 1){
       const arr = document.createElement('div');
@@ -865,29 +872,29 @@ function buildSnoop(){
   grid.className = 'chat-grid';
   sec.appendChild(grid);
 
-  const chatCard = card(grid, t('snoop.chat.title'), t('snoop.chat.sub'));
+  const chatCard = card(grid, t('agent.chat.title'), t('agent.chat.sub'));
   chatCard.root.classList.add('chat-panel');
   const log = document.createElement('div');
   log.className = 'chat-log';
-  log.id = 'snoop-log';
+  log.id = 'agent-log';
   chatCard.body.appendChild(log);
   const input = document.createElement('div');
   input.className = 'chat-input';
-  input.innerHTML = '<input id="snoop-in" type="text" placeholder="' + t('snoop.placeholder') + '"><button id="snoop-send">' + t('snoop.send') + '</button>';
+  input.innerHTML = '<input id="agent-in" type="text" placeholder="' + t('agent.placeholder') + '"><button id="agent-send">' + t('agent.send') + '</button>';
   chatCard.body.appendChild(input);
   grid.appendChild(chatCard.root);
 
   const side = document.createElement('div');
   side.className = 'chat-side';
-  const capCard = card(side, t('snoop.cap.title'), null);
-  const caps = ['snoop.cap.1t', 'snoop.cap.2t', 'snoop.cap.3t', 'snoop.cap.4t'];
+  const capCard = card(side, t('agent.cap.title'), null);
+  const caps = ['agent.cap.1t', 'agent.cap.2t', 'agent.cap.3t', 'agent.cap.4t'];
   capCard.body.innerHTML = '<ul class="cap-list">' + caps.map((k, i) =>
     '<li><b>' + t(k) + '</b>' + t(k.replace('t', 'd')) + '</li>').join('') + '</ul>';
   side.appendChild(capCard.root);
 
-  const qCard = card(side, t('snoop.quick.title'), null);
+  const qCard = card(side, t('agent.quick.title'), null);
   qCard.body.innerHTML = '<div class="chat-chips" style="padding:0">' +
-    ['snoop.q1', 'snoop.q2', 'snoop.q3', 'snoop.q4', 'snoop.q5'].map((k, i) =>
+    ['agent.q1', 'agent.q2', 'agent.q3', 'agent.q4', 'agent.q5'].map((k, i) =>
       '<button data-q="' + i + '">' + t(k) + '</button>').join('') + '</div>';
   side.appendChild(qCard.root);
   grid.appendChild(side);
@@ -904,7 +911,7 @@ function buildSnoop(){
   const addAIText = text => {
     const m = document.createElement('div');
     m.className = 'msg msg-ai';
-    m.innerHTML = '<div class="msg-avatar">S</div><div class="bubble"><div class="bubble-body"></div></div>';
+    m.innerHTML = '<div class="msg-avatar">✦</div><div class="bubble"><div class="bubble-body"></div></div>';
     m.querySelector('.bubble-body').textContent = text;
     log.appendChild(m);
     scroll();
@@ -913,7 +920,7 @@ function buildSnoop(){
   const addTyping = () => {
     const m = document.createElement('div');
     m.className = 'msg msg-ai';
-    m.innerHTML = '<div class="msg-avatar">S</div><div class="bubble typing"><i></i><i></i><i></i></div>';
+    m.innerHTML = '<div class="msg-avatar">✦</div><div class="bubble typing"><i></i><i></i><i></i></div>';
     log.appendChild(m);
     scroll();
     return m;
@@ -922,7 +929,7 @@ function buildSnoop(){
     const m = document.createElement('div');
     m.className = 'msg msg-ai';
     const chips = (stp.chips || []).map(c => '<span>' + c + '</span>').join('');
-    m.innerHTML = '<div class="msg-avatar">S</div><div class="bubble snoop-step">' +
+    m.innerHTML = '<div class="msg-avatar">✦</div><div class="bubble agent-step">' +
       '<div class="step-title">' + stp.icon + ' ' + t(stp.title) + '</div>' +
       '<div class="bubble-body"></div>' +
       (chips ? '<div class="bubble-src">' + chips + '</div>' : '') +
@@ -935,12 +942,12 @@ function buildSnoop(){
     const st = PROOF.statuses[v.status];
     const m = document.createElement('div');
     m.className = 'msg msg-ai';
-    m.innerHTML = '<div class="msg-avatar">S</div><div class="bubble snoop-verdict">' +
-      '<div class="step-title">📄 ' + t('snoop.verdict') + '</div>' +
+    m.innerHTML = '<div class="msg-avatar">✦</div><div class="bubble agent-verdict">' +
+      '<div class="step-title">📄 ' + t('agent.verdict') + '</div>' +
       '<div class="verdict-row"><span class="lv lv-' + v.status + '" style="color:' + st.text + '"><i>' + st.icon + '</i>' + t('status.' + v.status) + '</span>' +
-      '<span class="verdict-conf">' + t('snoop.conf') + ' <b>' + v.conf + '%</b></span></div>' +
+      '<span class="verdict-conf">' + t('agent.conf') + ' <b>' + v.conf + '%</b></span></div>' +
       '<p class="verdict-why"></p>' +
-      '<div class="evidence"><b>' + t('snoop.evidence') + '</b><ul>' + v.evidence.map(e => '<li>' + e + '</li>').join('') + '</ul></div>' +
+      '<div class="evidence"><b>' + t('agent.evidence') + '</b><ul>' + v.evidence.map(e => '<li>' + e + '</li>').join('') + '</ul></div>' +
       '</div>';
     m.querySelector('.verdict-why').textContent = v.rationale;
     log.appendChild(m);
@@ -949,23 +956,23 @@ function buildSnoop(){
 
   function runInvestigation(id){
     const sub = PROOF.byId(id);
-    if(SNOOP_BUSY) return;
+    if(AGENT_BUSY) return;
     if(!sub){ addAIText(LANG === 'zh' ? '未找到提交 ' + id + '。试试 PA-1082。' : 'Submission ' + id + ' not found. Try PA-1082.'); return; }
-    SNOOP_BUSY = true;
-    const { steps, verdict } = snoopSteps(sub);
+    AGENT_BUSY = true;
+    const { steps, verdict } = agentSteps(sub);
     const typing = addTyping();
     let delay = 950;
     steps.forEach((stp, i) => {
       setTimeout(() => {
         if(i === 0) typing.remove();
         addStep(stp);
-        if(i === steps.length - 1) setTimeout(() => { addVerdict(verdict); SNOOP_BUSY = false; }, 700);
+        if(i === steps.length - 1) setTimeout(() => { addVerdict(verdict); AGENT_BUSY = false; }, 700);
       }, delay);
       delay += 1100;
     });
   }
 
-  function snoopAsk(text){
+  function agentAsk(text){
     addUser(text);
     const idMatch = text.match(/PA-\d+/i);
     if(idMatch){
@@ -994,23 +1001,397 @@ function buildSnoop(){
       addAIText(ans);
     }, 420);
   }
-  window.__snoopAsk = snoopAsk;
+  window.__agentAsk = agentAsk;
 
   /* 欢迎语 */
-  const wel = addAIText(t('snoop.welcome'));
+  const wel = addAIText(t('agent.welcome'));
   wel.querySelector('.bubble-body').style.whiteSpace = 'pre-line';
 
-  $('#snoop-send').addEventListener('click', () => {
-    const inp = $('#snoop-in');
+  $('#agent-send').addEventListener('click', () => {
+    const inp = $('#agent-in');
     const v = inp.value.trim();
     if(!v) return;
     inp.value = '';
-    snoopAsk(v);
+    agentAsk(v);
   });
-  $('#snoop-in').addEventListener('keydown', ev => { if(ev.key === 'Enter') $('#snoop-send').click(); });
-  $$('#tab-snoop [data-q]').forEach(b => {
-    b.addEventListener('click', () => snoopAsk(t('snoop.q' + (Number(b.dataset.q) + 1))));
+  $('#agent-in').addEventListener('keydown', ev => { if(ev.key === 'Enter') $('#agent-send').click(); });
+  $$('#tab-agent [data-q]').forEach(b => {
+    b.addEventListener('click', () => agentAsk(t('agent.q' + (Number(b.dataset.q) + 1))));
   });
+}
+
+/* ============================================================
+   提交验证(闭环:上传 → 验证 → 结果与凭据)
+   ============================================================ */
+let SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', result: null };
+
+function buildSubmit(){
+  const sec = $('#tab-submit');
+  sec.innerHTML = '';
+  SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', result: null };
+
+  /* 步骤条 */
+  const stepper = document.createElement('div');
+  stepper.className = 'stepper';
+  ['submit.step1', 'submit.step2', 'submit.step3'].forEach((k, i) => {
+    const it = document.createElement('div');
+    it.className = 'stepper-item';
+    it.innerHTML = '<i>' + (i + 1) + '</i><span>' + t(k) + '</span>';
+    stepper.appendChild(it);
+    if(i < 2){ const ln = document.createElement('div'); ln.className = 'stepper-line'; stepper.appendChild(ln); }
+  });
+  sec.appendChild(stepper);
+
+  const c = card(sec, t('submit.title'), t('submit.sub'));
+  const body = c.body;
+
+  const renderStage = () => {
+    body.innerHTML = '';
+    if(SUBMIT.stage === 1) renderStage1(body);
+    else if(SUBMIT.stage === 2) renderStage2(body);
+    else renderStage3(body);
+    stepper.querySelectorAll('.stepper-item').forEach((it, i) => {
+      it.classList.toggle('active', SUBMIT.stage === i + 1);
+      it.classList.toggle('done', SUBMIT.stage > i + 1);
+    });
+    renderSessionList();
+  };
+
+  function setFile(f){
+    SUBMIT.file = f;
+    if(SUBMIT.url) URL.revokeObjectURL(SUBMIT.url);
+    SUBMIT.url = URL.createObjectURL(f);
+    SUBMIT.dims = null;
+    const img = new Image();
+    img.onload = () => { SUBMIT.dims = [img.naturalWidth, img.naturalHeight]; renderStage(); };
+    img.src = SUBMIT.url;
+  }
+
+  /* ---- 第一步:上传与申报 ---- */
+  function renderStage1(body){
+    const dz = document.createElement('div');
+    dz.className = 'dropzone';
+    dz.innerHTML = '<div class="dz-icon">📷</div><div class="dz-hint">' + t('submit.drop.hint') + '</div><div class="dz-sub">' + t('submit.drop.sub') + '</div>';
+    const fi = document.createElement('input');
+    fi.type = 'file'; fi.accept = 'image/*'; fi.style.display = 'none';
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', ev => { ev.preventDefault(); dz.classList.add('drag'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+    dz.addEventListener('drop', ev => {
+      ev.preventDefault(); dz.classList.remove('drag');
+      const f = ev.dataTransfer.files && ev.dataTransfer.files[0];
+      if(f && f.type && f.type.startsWith('image/')) setFile(f);
+    });
+    fi.addEventListener('change', () => { if(fi.files[0]) setFile(fi.files[0]); });
+    body.appendChild(dz);
+    body.appendChild(fi);
+
+    if(SUBMIT.file){
+      const prev = document.createElement('div');
+      prev.className = 'dz-preview';
+      prev.innerHTML = '<img src="' + SUBMIT.url + '" alt="preview">' +
+        '<div class="dz-info"><div><span>' + t('submit.file.size') + '</span><b>' + fmtNum(SUBMIT.file.size / 1024, 1) + ' KB</b></div>' +
+        '<div><span>' + t('submit.file.dims') + '</span><b>' + (SUBMIT.dims ? SUBMIT.dims.join(' × ') : '…') + '</b></div>' +
+        '<div><span>' + t('submit.file.type') + '</span><b>' + (SUBMIT.file.type || SUBMIT.file.name.split('.').pop()) + '</b></div></div>' +
+        '<button class="btn btn-ghost dz-change" type="button">✕</button>';
+      prev.querySelector('.dz-change').addEventListener('click', ev => {
+        ev.stopPropagation();
+        SUBMIT.file = null;
+        if(SUBMIT.url) URL.revokeObjectURL(SUBMIT.url);
+        SUBMIT.url = null; SUBMIT.dims = null;
+        renderStage();
+      });
+      body.appendChild(prev);
+    }
+
+    /* 申报表单 */
+    const form = document.createElement('div');
+    form.className = 'claim-form';
+    const fRow1 = document.createElement('div');
+    fRow1.className = 'form-row';
+    fRow1.innerHTML = '<span class="filter-label">' + t('submit.claim.action') + '</span><span class="chip-row" id="sub-actions"></span>';
+    const aRow = fRow1.querySelector('#sub-actions');
+    PROOF.actions.forEach(a => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (SUBMIT.action === a.key ? ' active' : '');
+      b.innerHTML = '<span>' + a.icon + '</span>' + t('act.' + a.key);
+      b.addEventListener('click', () => { SUBMIT.action = a.key; renderStage(); });
+      aRow.appendChild(b);
+    });
+    form.appendChild(fRow1);
+
+    const fRow2 = document.createElement('div');
+    fRow2.className = 'form-row';
+    fRow2.innerHTML = '<span class="filter-label">' + t('submit.claim.city') + '</span>';
+    const sel = document.createElement('select');
+    sel.className = 'txt-in';
+    PROOF.cities.forEach((cc, i) => {
+      const o = document.createElement('option');
+      o.value = i;
+      o.textContent = lb(cc) + ' · ' + lb(cc.country);
+      sel.appendChild(o);
+    });
+    sel.value = SUBMIT.city;
+    sel.addEventListener('change', () => { SUBMIT.city = +sel.value; });
+    fRow2.appendChild(sel);
+    fRow2.insertAdjacentHTML('beforeend', '<span class="filter-label">' + t('submit.claim.name') + '</span>');
+    const nm = document.createElement('input');
+    nm.type = 'text';
+    nm.className = 'txt-in';
+    nm.placeholder = t('submit.claim.namePh');
+    nm.value = SUBMIT.name;
+    nm.addEventListener('input', () => { SUBMIT.name = nm.value; });
+    fRow2.appendChild(nm);
+    form.appendChild(fRow2);
+    body.appendChild(form);
+
+    /* 操作 */
+    const actions = document.createElement('div');
+    actions.className = 'submit-actions';
+    const ok = document.createElement('button');
+    ok.className = 'btn btn-primary';
+    ok.textContent = t('submit.btn');
+    ok.disabled = !(SUBMIT.file && SUBMIT.action);
+    if(ok.disabled) ok.title = t('submit.btn.disabled');
+    ok.addEventListener('click', doSubmit);
+    const demo = document.createElement('button');
+    demo.className = 'btn btn-ghost';
+    demo.textContent = t('submit.demo');
+    demo.title = t('submit.demoNote');
+    demo.addEventListener('click', () => window.__demoSubmit());
+    actions.appendChild(ok); actions.appendChild(demo);
+    body.appendChild(actions);
+
+    const apiNote = document.createElement('p');
+    apiNote.className = 'qc-hint';
+    apiNote.textContent = t('submit.api.note');
+    body.appendChild(apiNote);
+  }
+
+  /* ---- 第二步:验证中 ---- */
+  function renderStage2(body){
+    body.innerHTML =
+      '<div class="proc-head"><i class="pulse big"></i><div><b>' + t('submit.processing') + '</b><p>' + t('submit.processing.sub') + '</p></div></div>' +
+      '<div class="pipe-run">' +
+      ['submit.pipe.ingest', 'submit.pipe.models', 'submit.pipe.dedupe', 'submit.pipe.receipt'].map(k =>
+        '<div class="row"><span class="dot"></span><span class="lbl">' + t(k) + '</span><span class="chk">✓</span></div>').join('') +
+      '</div>';
+  }
+
+  function doSubmit(){
+    if(!SUBMIT.file || !SUBMIT.action) return;
+    SUBMIT.stage = 2;
+    renderStage();
+    const payload = { file: SUBMIT.file, action: SUBMIT.action, city: SUBMIT.city, submitter: SUBMIT.name };
+    const rows = body.querySelectorAll('.pipe-run .row');
+    const stagesDone = [false, false, false, false];
+    const timers = [500, 1400, 2300, 3200].map((t2, i) => setTimeout(() => {
+      stagesDone[i] = true;
+      if(rows[i]){ rows[i].classList.add('done'); rows[i].classList.remove('run'); }
+      if(rows[i + 1] && !stagesDone[i + 1]) rows[i + 1].classList.add('run');
+      maybeFinish();
+    }, t2));
+    if(rows[0]) rows[0].classList.add('run');
+    let promiseDone = false, result = null;
+    proofApiSubmit(payload).then(r => { result = r; promiseDone = true; maybeFinish(); })
+      .catch(err => {
+        timers.forEach(clearTimeout);
+        body.innerHTML = '<p class="verdict-why" style="padding:10px 2px">⚠ ' + (err && err.message ? err.message : 'verify failed') + '</p>' +
+          '<button class="btn btn-ghost" type="button">← ' + t('submit.step1') + '</button>';
+        body.querySelector('button').addEventListener('click', () => { SUBMIT.stage = 1; renderStage(); });
+      });
+    function maybeFinish(){
+      if(promiseDone && stagesDone.every(Boolean)){
+        timers.forEach(clearTimeout);
+        SUBMIT.result = result;
+        SUBMIT.stage = 3;
+        renderStage();
+        if(window.__refreshOverview) window.__refreshOverview();
+        if(window.__renderQueue) window.__renderQueue();
+        if(window.__renderDup) window.__renderDup();
+      }
+    }
+  }
+
+  /* ---- 第三步:结果与凭据 ---- */
+  function renderStage3(body){
+    const r = SUBMIT.result;
+    const s = r.submission, v = r.verification;
+    const st = PROOF.statuses[s.status];
+
+    const banner = document.createElement('div');
+    banner.className = 'verdict-banner vb-' + s.status;
+    banner.innerHTML = '<div class="vb-icon">' + st.icon + '</div>' +
+      '<div class="vb-body"><b>' + t('submit.result.title') + ' · ' + t('status.' + s.status) + '</b>' +
+      '<p>' + t('submit.verdict.' + s.status) + '</p></div>' +
+      '<div class="vb-id">' + s.id + '</div>';
+    body.appendChild(banner);
+
+    const grid = document.createElement('div');
+    grid.className = 'submit-grid';
+
+    const scoreP = document.createElement('div');
+    scoreP.className = 'panel';
+    scoreP.innerHTML = '<div class="panel-title">' + t('submit.scores') + '</div>';
+    const sb = document.createElement('div');
+    sb.className = 'submit-score';
+    const ringBox = document.createElement('div');
+    scoreRing(ringBox, s.score, st.color, 72);
+    sb.appendChild(ringBox);
+    const bars = document.createElement('div');
+    bars.className = 'drawer-subbars';
+    bars.appendChild(subBars(s.subs));
+    sb.appendChild(bars);
+    scoreP.appendChild(sb);
+    grid.appendChild(scoreP);
+
+    const flagP = document.createElement('div');
+    flagP.className = 'panel';
+    flagP.innerHTML = '<div class="panel-title">' + t('submit.flags') + '</div>';
+    if(!v.flags.length){
+      const none = document.createElement('p');
+      none.className = 'flag-none';
+      none.textContent = t('submit.flags.none');
+      flagP.appendChild(none);
+    } else {
+      v.flags.forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'flag-row';
+        const st2 = f.level === 'flagged' ? PROOF.statuses.flagged : (f.level === 'serious' ? PROOF.statuses.rejected : PROOF.statuses.pending);
+        row.innerHTML = '<div class="flag-ic" style="color:' + st2.text + ';border-color:' + st2.color + '55">' + st2.icon + '</div>' +
+          '<div><span class="flag-code">' + f.code + '</span></div>' +
+          '<p class="flag-msg">' + t(f.msgKey, f.vars) + '</p>';
+        flagP.appendChild(row);
+      });
+    }
+    grid.appendChild(flagP);
+    body.appendChild(grid);
+
+    /* 凭据 */
+    const rc = document.createElement('div');
+    rc.className = 'receipt';
+    rc.id = 'receipt-print';
+    const pipeRows = [
+      ['submit.pipe.ingest', true], ['submit.pipe.models', true],
+      ['submit.pipe.dedupe', true, s.dup ? ' ⚠ ' + t('qc.dup') : ''], ['submit.pipe.receipt', true]
+    ].map(x => '<div class="rc-pipe-row"><i>' + (x[1] ? '✓' : '—') + '</i><span>' + t(x[0]) + (x[2] || '') + '</span></div>').join('');
+    rc.innerHTML =
+      '<div class="rc-head"><div class="rc-brand"><span class="rc-logo">◆</span><b>Proof API</b></div>' +
+      '<span class="rc-title">' + t('submit.receipt') + '</span>' +
+      '<span class="rc-stamp lv lv-' + s.status + '" style="color:' + st.text + '"><i>' + st.icon + '</i>' + t('status.' + s.status) + '</span></div>' +
+      '<div class="rc-row rc-id"><span>' + t('submit.receipt.issued') + '</span><b>' + s.id + '</b><i>' + fmtTime(r.receipt.issuedAt) + '</i></div>' +
+      '<div class="rc-sep"></div>' +
+      '<div class="rc-kv"><span>' + t('submit.receipt.digest') + '</span><b class="mono">' + s.hash + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('submit.receipt.phash') + '</span><b class="mono">' + s.phash + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('table.action') + '</span><b>' + ACT[s.action].icon + ' ' + t('act.' + s.action) + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('submit.claim.city') + '</span><b>' + lb(PROOF.city(s.city)) + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('drawer.device') + '</span><b>' + s.device + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('drawer.time') + '</span><b>' + fmtTime(s.time) + '</b></div>' +
+      '<div class="rc-sep"></div>' +
+      '<div class="rc-sub">' + t('submit.receipt.pipeline') + '</div>' + pipeRows +
+      '<div class="rc-sep"></div>' +
+      '<div class="rc-sub">' + t('submit.receipt.detail') + '</div>' +
+      '<div class="rc-score">' + s.score + '<small> / 100</small></div>' +
+      '<div class="rc-kv"><span>' + t('qc.auth') + '</span><b>' + s.subs.auth + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('qc.action') + '</span><b>' + s.subs.action + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('qc.loc') + '</span><b>' + s.subs.loc + '</b></div>' +
+      '<div class="rc-sep"></div>' +
+      '<div class="rc-foot">' + t('submit.receipt.line1') + '<br>' + t('submit.receipt.line2') + '</div>';
+    body.appendChild(rc);
+
+    /* 后续操作 */
+    const ops = document.createElement('div');
+    ops.className = 'submit-actions';
+    const print = document.createElement('button');
+    print.className = 'btn btn-ghost';
+    print.textContent = t('submit.receipt.print');
+    print.addEventListener('click', () => window.print());
+    const again = document.createElement('button');
+    again.className = 'btn btn-ghost';
+    again.textContent = t('submit.receipt.again');
+    again.addEventListener('click', () => {
+      SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: SUBMIT.city, name: SUBMIT.name, result: null };
+      renderStage();
+    });
+    const toQueue = document.createElement('button');
+    toQueue.className = 'btn btn-ghost';
+    toQueue.textContent = t('submit.receipt.queue');
+    toQueue.addEventListener('click', () => switchTab('queue'));
+    ops.appendChild(print); ops.appendChild(again); ops.appendChild(toQueue);
+    if(s.status !== 'verified'){
+      const toAgent = document.createElement('button');
+      toAgent.className = 'btn btn-agent';
+      toAgent.style.width = 'auto';
+      toAgent.style.margin = '0';
+      toAgent.textContent = t('submit.receipt.agent');
+      toAgent.addEventListener('click', () => {
+        switchTab('agent');
+        setTimeout(() => window.__agentAsk(t('agent.investigating', { id: s.id })), 400);
+      });
+      ops.appendChild(toAgent);
+    }
+    body.appendChild(ops);
+    const note = document.createElement('p');
+    note.className = 'qc-hint';
+    note.textContent = t('submit.result.note');
+    body.appendChild(note);
+  }
+
+  /* 会话记录 */
+  const sessCard = card(sec, t('submit.sess'), null);
+  const sessBody = sessCard.body;
+
+  function renderSessionList(){
+    if(!sessBody) return;
+    sessBody.innerHTML = '';
+    if(!REG.subs.length){
+      sessBody.innerHTML = '<p class="muted-text">' + t('submit.sess.none') + '</p>';
+      return;
+    }
+    const cnt = document.createElement('p');
+    cnt.className = 'qc-hint';
+    cnt.textContent = t('submit.sess.n', { n: REG.subs.length });
+    sessBody.appendChild(cnt);
+    REG.subs.slice().reverse().forEach(r => {
+      const s = r.submission;
+      const row = document.createElement('div');
+      row.className = 'feed-row';
+      const info = document.createElement('div');
+      info.className = 'feed-info';
+      const top = document.createElement('div');
+      top.className = 'feed-top';
+      const idEl = document.createElement('b');
+      idEl.textContent = s.id;
+      top.appendChild(idEl);
+      top.appendChild(lvBadge(s.status));
+      top.appendChild(actTag(s.action));
+      const meta = document.createElement('div');
+      meta.className = 'feed-meta';
+      meta.textContent = s.submitter + ' · ' + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
+      info.appendChild(top); info.appendChild(meta);
+      const view = document.createElement('button');
+      view.className = 'btn btn-ghost';
+      view.textContent = t('submit.sess.view');
+      view.addEventListener('click', () => {
+        SUBMIT.result = r;
+        SUBMIT.stage = 3;
+        renderStage();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      row.appendChild(info); row.appendChild(view);
+      sessBody.appendChild(row);
+    });
+  }
+
+  /* 示例照片一键演示 */
+  window.__demoSubmit = async () => {
+    if(!SUBMIT.action) SUBMIT.action = 'afforest';
+    const f = await makeSamplePhoto(SUBMIT.action);
+    setFile(f);
+    setTimeout(doSubmit, 150);
+  };
+
+  renderStage();
 }
 
 /* ============================================================
@@ -1031,12 +1412,13 @@ function applyStaticLabels(){
   $$('.tabs button').forEach(b => {
     const dot = document.createElement('i');
     dot.className = 'tab-dot';
-    dot.style.background = { overview: '#2a78d6', queue: '#eb6834', dup: '#ec835a', analytics: '#1baf7a', snoop: '#6250d6' }[b.dataset.tab];
+    dot.style.background = { submit: '#199e70', overview: '#2a78d6', queue: '#eb6834', dup: '#ec835a', analytics: '#1baf7a', agent: '#6250d6' }[b.dataset.tab];
     b.prepend(dot);
   });
   $('#footer-1').textContent = t('footer.1');
   $('#footer-2').textContent = t('footer.2');
   $('#footer-3').textContent = t('footer.3');
+  $('#footer-4').textContent = t('footer.4');
   $('#intro-sub').textContent = t('intro.sub');
   $('#intro-hint').textContent = t('intro.hint');
   const introTitle = document.querySelector('.intro-box h2');
@@ -1044,14 +1426,27 @@ function applyStaticLabels(){
 }
 
 function buildAll(){
+  buildSubmit();
   buildOverview();
   buildQueue();
   buildDup();
   buildAnalytics();
-  buildSnoop();
+  buildAgent();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  /* 调试钩子:?dbg=1 在页面底部显示未捕获错误(用于排查联动刷新) */
+  try {
+    if(new URLSearchParams(location.search).get('dbg')){
+      window.addEventListener('error', ev => {
+        let d = document.getElementById('dbg-log');
+        if(!d){ d = document.createElement('div'); d.id = 'dbg-log'; d.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9998;background:#111;color:#7f7;padding:10px 16px;font:11px/1.6 monospace;white-space:pre-wrap;max-height:40vh;overflow:auto;'; document.body.appendChild(d); }
+        d.textContent += (ev.message || ev.type) + '  @' + (ev.filename || '').split('/').pop() + ':' + (ev.lineno || '?') + '\n';
+      });
+    }
+  } catch(e) {}
+
+  restoreSession(); /* 会话提交并入数据集(队列/KPI 联动) */
   applyStaticLabels();
   buildAll();
 
@@ -1077,7 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 70);
   intro.addEventListener('click', () => { clearInterval(timer); intro.classList.add('done'); });
 
-  /* URL 参数:?tab=queue 直达页签 · ?nosplash 跳过启动画面 · ?drawer=PA-xxxx 打开明细 · ?snoop=PA-xxxx 自动发起调查(截图/调试用) */
+  /* URL 参数:?tab=queue 直达页签 · ?nosplash 跳过启动画面 · ?drawer=PA-xxxx 打开明细 · ?agent=PA-xxxx 自动发起调查 · ?demo-submit=1 自动演示提交(截图/调试用) */
   try {
     const qp = new URLSearchParams(location.search);
     const tab = qp.get('tab');
@@ -1085,10 +1480,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if(qp.get('nosplash')){ clearInterval(timer); intro.classList.add('done'); }
     const did = qp.get('drawer');
     if(did) setTimeout(() => openDrawer(did), 300);
-    const sid = qp.get('snoop');
+    const sid = qp.get('agent');
     if(sid){
-      switchTab('snoop', true);
-      setTimeout(() => window.__snoopAsk(t('snoop.investigating', { id: sid })), 500);
+      switchTab('agent', true);
+      setTimeout(() => window.__agentAsk(t('agent.investigating', { id: sid })), 500);
+    }
+    if(qp.get('demo-submit')){
+      switchTab('submit', true);
+      setTimeout(() => window.__demoSubmit && window.__demoSubmit(), 400);
+      if(qp.get('demo-submit') === '2') setTimeout(() => window.__demoSubmit && window.__demoSubmit(), 7000);
     }
   } catch(e) {}
 });

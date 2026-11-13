@@ -117,7 +117,15 @@ function sceneInner(action, r, hour, uid){
   return s;
 }
 
-/* 对外入口:生成某提交的"照片"(内联 SVG) */
+/* ---- 照片渲染入口:真实照片(上传缩略图 / 本地素材)优先,SVG 场景兜底 ---- */
+const PHOTO_V = '20261113c';
+function photoHtml(sub){
+  if(sub.thumb) return '<img src="' + sub.thumb + '" alt="submission photo" loading="lazy">';
+  if(sub.photo) return '<img src="' + sub.photo + '?v=' + PHOTO_V + '" alt="submission photo" loading="lazy">';
+  return photoSvg(sub);
+}
+
+/* 对外入口:生成某提交的"照片"(内联 SVG,无真实素材时的兜底) */
 function photoSvg(sub){
   const base = sub.dup ? PROOF.byId(sub.dup.base) : sub;
   const r = hr(strHash(base.id + base.action));

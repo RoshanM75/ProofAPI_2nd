@@ -50,6 +50,16 @@ const CITIES = [
 const SUBMITTERS = ['林晓','王梓','陈雨桐','张伟','刘畅','赵一鸣','Amina Wanjiru','黄思远','李楠','Putri Rahma','周子墨','Diego Torres','何雨晴','孙启','Priya Nair','郑浩然','吴悠','徐嘉','Grace Kim','罗伊'];
 const DEVICES = ['iPhone 15 Pro','Pixel 9','Redmi K70','Galaxy S24','Mi 14','OnePlus 12'];
 
+/* ---- 真实照片素材(公有领域 / CC 许可,本地化存储,出处见 build/photos-manifest.json) ---- */
+const PHOTOS = {
+  afforest: ['assets/photos/afforest-01.jpg', 'assets/photos/afforest-02.jpg'],
+  solar:    ['assets/photos/solar-01.jpg',    'assets/photos/solar-02.jpg'],
+  wetland:  ['assets/photos/wetland-01.jpg',  'assets/photos/wetland-02.jpg'],
+  ev:       ['assets/photos/ev-01.jpg',       'assets/photos/ev-02.jpg'],
+  cleanup:  ['assets/photos/cleanup-01.jpg',  'assets/photos/cleanup-02.jpg'],
+  retrofit: ['assets/photos/retrofit-01.jpg', 'assets/photos/retrofit-02.jpg']
+};
+
 /* ---- 生成 ---- */
 function pickAction(rnd){
   const total = ACTIONS.reduce((a, x) => a + x.w, 0);
@@ -77,6 +87,7 @@ function buildSubmissions(){
     const a = pickAction(rnd);
     const day = 13 - Math.floor(13 * Math.pow(rnd(), 1.55));
     const s = mkScores(rnd, a.bases);
+    const pool = PHOTOS[a.key] || [];
     subs.push({
       id: 'PA-' + (1041 + i),
       submitter: SUBMITTERS[Math.floor(rnd() * SUBMITTERS.length)],
@@ -84,10 +95,11 @@ function buildSubmissions(){
       time: new Date(2026, 9, 31 + day, 7 + Math.floor(rnd() * 13), Math.floor(rnd() * 60)),
       subs: s, score: overallOf(s, (rnd() - 0.5) * 4),
       device: DEVICES[Math.floor(rnd() * DEVICES.length)],
-      gpsOk: rnd() > 0.10, hash: randHash(rnd), dup: null, status: null
+      gpsOk: rnd() > 0.10, hash: randHash(rnd), dup: null, status: null,
+      photo: pool.length ? pool[i % pool.length] : null
     });
   }
-  /* 定向构造:4 条低分(驳回演示)+ 2 条地理异常(强制复核 + SNOOP 演示) */
+  /* 定向构造:4 条低分(驳回演示)+ 2 条地理异常(强制复核 + 智能体演示) */
   const craft = [
     { i: 6, low: true },
     { i: 13, low: true, gps: false },
@@ -181,7 +193,7 @@ const PROOF = {
       const d = new Date(2026, 9, 31 + i, 12, 0);
       rows.push({ label: (d.getMonth() + 1) + '/' + d.getDate(), verified: 0, pending: 0, rejected: 0, flagged: 0 });
     }
-    this.submissions.forEach(s => { rows[dayIndex(s.time)][s.status]++; });
+    this.submissions.forEach(s => { const di = Math.max(0, Math.min(13, dayIndex(s.time))); rows[di][s.status]++; });
     return rows;
   },
 
@@ -190,7 +202,7 @@ const PROOF = {
     for(let i = 0; i < 14; i++){
       const d = new Date(2026, 9, 31 + i, 12, 0);
       labels.push((d.getMonth() + 1) + '/' + d.getDate());
-      const day = this.submissions.filter(s => dayIndex(s.time) === i);
+      const day = this.submissions.filter(s => Math.max(0, Math.min(13, dayIndex(s.time))) === i);
       inV.push(day.length);
       okV.push(day.filter(s => s.status === 'verified').length);
     }
