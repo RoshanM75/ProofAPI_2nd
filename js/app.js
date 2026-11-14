@@ -8,8 +8,37 @@
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const ACT = Object.fromEntries(PROOF.actions.map(a => [a.key, a]));
+const ORG = Object.fromEntries(PROOF.orgs.map(o => [o.key, o]));
+const CAT = Object.fromEntries(PROOF.categories.map(c => [c.key, c]));
 const pad2 = n => String(n).padStart(2, '0');
 const fmtTime = d => (d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+const fmtDate = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+const dateKey = d => fmtDate(d);
+/* 自定义组织 'custom:<名称>' 必须先于登记库查找,否则回落成"个人/Individual" */
+const orgName = k => {
+  if(k && k.startsWith('custom:')) return k.slice(7);
+  return ORG[k] ? lb(ORG[k].name) : t('map.individual');
+};
+const catName = k => (CAT[k] ? lb(CAT[k].name) : k);
+const countryName = key => {
+  const c = PROOF.cities.find(x => x.country.en === key);
+  return c ? lb(c.country) : key;
+};
+const mapCountryName = c => (LANG === 'en' ? c.name : (c.zh || c.name));
+function orgTag(key){
+  const o = ORG[key];
+  const custom = !!(key && key.startsWith('custom:'));
+  const b = document.createElement('span');
+  b.className = 'orgtag' + (custom ? ' orgtag-custom' : '');
+  b.textContent = (custom ? '🏢 ' : (o ? (TYPE_ICONS[o.type] || '🏢') + ' ' : '🙂 ')) + orgName(key);
+  if(custom){
+    const badge = document.createElement('i');
+    badge.className = 'orgtag-badge';
+    badge.textContent = t('drawer.org.unregistered');
+    b.appendChild(badge);
+  }
+  return b;
+}
 
 /* ---- 通用组件 ---- */
 function card(parent, title, sub, tools){
@@ -74,7 +103,20 @@ function photoEl(sub, cls){
   return d;
 }
 
-function subBars(subs){
+/* 分数来源标注:有实测取证的会话提交 vs 演示档案快照 */
+function subSrcs(s){
+  if(s.forensics){
+    return {
+      auth: 'src.auth.measured',
+      action: 'src.action',
+      loc: s.forensics.locSource === 'exif-gps' ? 'src.loc.gps' : 'src.loc.demo'
+    };
+  }
+  return { auth: 'src.auth.demo', action: 'src.action', loc: 'src.loc.demo' };
+}
+
+/* subs: {auth, action, loc};srcs(可选): {auth, action, loc} 的 i18n 键 → 在标签后加"分数来源"小标 */
+function subBars(subs, srcs){
   const box = document.createElement('div');
   box.className = 'subbars';
   [['auth', 'qc.auth'], ['action', 'qc.action'], ['loc', 'qc.loc']].forEach(([k, key]) => {
@@ -82,7 +124,8 @@ function subBars(subs){
     const color = v < 60 ? PROOF.statuses.rejected.color : (v < 85 ? PROOF.statuses.pending.color : PROOF.statuses.verified.color);
     const row = document.createElement('div');
     row.className = 'subbar';
-    row.innerHTML = '<span class="subbar-label">' + t(key) + '</span>' +
+    row.innerHTML = '<span class="subbar-label">' + t(key) +
+      (srcs && srcs[k] ? '<i class="subbar-src">' + t(srcs[k]) + '</i>' : '') + '</span>' +
       '<i class="subbar-track"><em style="width:' + v + '%;background:' + color + '"></em></i>' +
       '<b>' + v + '</b>';
     box.appendChild(row);
@@ -121,8 +164,10 @@ function buildOverview(){
   const k = PROOF.kpis();
   hero.innerHTML =
     '<div class="hero-kicker"><i class="pulse"></i>' + t('hero.kicker') + '</div>' +
-    '<div class="hero-num" id="ov-total">0</div>' +
-    '<div class="hero-label">' + t('hero.label') + '</div>' +
+    '<div class="hero-stats">' +
+      '<div class="hero-stat"><div class="hero-num" id="ov-total">0</div><div class="hero-label">' + t('hero.label') + '</div></div>' +
+      '<div class="hero-stat"><div class="hero-num hero-mit" id="ov-mit">0</div><div class="hero-label">' + t('kpi.mitigation') + '</div><div class="hero-note">' + t('kpi.mitigationNote') + '</div></div>' +
+    '</div>' +
     '<div class="hero-sub">' + t('hero.sub') + '</div>' +
     '<div class="hero-badges">' +
       '<span class="badge badge-info">◈ ' + t('hero.badge1') + '</span>' +
@@ -158,6 +203,8 @@ function buildOverview(){
     });
     const heroNum = $('#ov-total');
     animateNumber(heroNum, K.total, 0);
+    const heroMit = $('#ov-mit');
+    if(heroMit) animateNumber(heroMit, PROOF.verifiedMitigation(), 1);
     kpi.querySelectorAll('.stat-value').forEach((n, i) => { n.textContent = tiles[i].value; });
   };
 
@@ -206,7 +253,8 @@ function buildOverview(){
     const tbody = tb.querySelector('tbody');
     PROOF.byAction().forEach(a => {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + a.icon + ' ' + t('act.' + a.key) + '</td>' +
+      const catChip = '<span style="color:' + CAT[a.cat].color + ';font-size:10.5px;border:1px solid ' + CAT[a.cat].color + '4d;background:' + CAT[a.cat].color + '14;border-radius:99px;padding:1px 7px;margin-left:4px">' + catName(a.cat) + '</span>';
+      tr.innerHTML = '<td>' + a.icon + ' ' + t('act.' + a.key) + catChip + '</td>' +
         '<td>' + a.count + '</td><td>' + fmtNum(a.avg, 1) + '</td><td>' + fmtNum(a.dupRate, 1) + '%</td>';
       tbody.appendChild(tr);
     });
@@ -237,7 +285,7 @@ function buildOverview(){
       top.appendChild(lvBadge(s.status));
       const meta = document.createElement('div');
       meta.className = 'feed-meta';
-      meta.textContent = ACT[s.action].icon + ' ' + s.submitter + ' · ' + lb(c) + ' · ' + fmtTime(s.time);
+      meta.textContent = ACT[s.action].icon + ' ' + s.submitter + ' · ' + (s.org ? orgName(s.org) + ' · ' : '') + lb(c) + ' · ' + fmtTime(s.time);
       info.appendChild(top); info.appendChild(meta);
       row.appendChild(th); row.appendChild(info);
       row.addEventListener('click', () => switchTab('queue'));
@@ -345,6 +393,7 @@ function buildQueue(){
       top.appendChild(idEl);
       top.appendChild(lvBadge(s.status));
       top.appendChild(actTag(s.action));
+      if(s.org) top.appendChild(orgTag(s.org));
       const meta = document.createElement('div');
       meta.className = 'qc-meta';
       meta.textContent = s.submitter + ' · ' + lb(c) + ' · ' + fmtTime(s.time);
@@ -400,6 +449,8 @@ function buildQueue(){
     closeDrawer();
     renderQueue();
     if(window.__refreshOverview) window.__refreshOverview();
+    if(window.__renderMap) window.__renderMap();
+    if(window.__renderAnalytics) window.__renderAnalytics();
   }
   window.__setVerdict = setVerdict;
   window.__renderQueue = renderQueue;
@@ -436,7 +487,7 @@ function openDrawer(id){
   hL.appendChild(hId);
   const hMeta = document.createElement('div');
   hMeta.className = 'drawer-head-meta';
-  hMeta.textContent = s.submitter + ' · ' + lb(c) + ', ' + lb(c.country);
+  hMeta.textContent = s.submitter + (s.org ? ' · ' + orgName(s.org) : '') + ' · ' + lb(c) + ', ' + lb(c.country);
   hL.appendChild(hMeta);
   head.appendChild(hL);
   head.appendChild(lvBadge(s.status));
@@ -450,6 +501,7 @@ function openDrawer(id){
   const tags = document.createElement('div');
   tags.className = 'drawer-tags';
   tags.appendChild(actTag(s.action));
+  if(s.org) tags.appendChild(orgTag(s.org));
   if(s.dup){
     const d = document.createElement('span');
     d.className = 'badge badge-warn';
@@ -462,8 +514,11 @@ function openDrawer(id){
   meta.className = 'summary-meta';
   meta.innerHTML =
     '<div><span>' + t('drawer.time') + '</span><b>' + fmtTime(s.time) + '</b></div>' +
+    '<div><span>' + t('drawer.org') + '</span><b>' + orgName(s.org) +
+      (s.org && s.org.startsWith('custom:') ? ' · ' + t('drawer.org.unregistered') + (s.orgType ? ' · ' + t('org.type.' + s.orgType) : '') : '') + '</b></div>' +
     '<div><span>' + t('drawer.device') + '</span><b>' + s.device + '</b></div>' +
-    '<div><span>' + t('drawer.gps') + '</span><b style="color:' + (s.gpsOk ? PROOF.statuses.verified.text : PROOF.statuses.rejected.text) + '">' + t(s.gpsOk ? 'drawer.gps.ok' : 'drawer.gps.bad') + '</b></div>' +
+    '<div><span>' + t('drawer.gps') + '</span><b style="color:' + (s.gpsOk ? PROOF.statuses.verified.text : PROOF.statuses.rejected.text) + '">' + t(s.gpsOk ? 'drawer.gps.ok' : 'drawer.gps.bad') +
+      (s.gpsOk && s.gps ? ' · ' + s.gps.lat.toFixed(4) + ', ' + s.gps.lon.toFixed(4) : '') + '</b></div>' +
     '<div><span>' + t('drawer.hash') + '</span><b>' + s.hash + '</b></div>';
   pn.appendChild(meta);
 
@@ -480,7 +535,7 @@ function openDrawer(id){
   sBody.appendChild(ringBox);
   const bars = document.createElement('div');
   bars.className = 'drawer-subbars';
-  bars.appendChild(subBars(s.subs));
+  bars.appendChild(subBars(s.subs, subSrcs(s)));
   sBody.appendChild(bars);
   scores.appendChild(sBody);
   pn.appendChild(scores);
@@ -567,7 +622,7 @@ function buildDup(){
     const tiles = [
       { label: t('dup.kpi.groups'), value: fmtNum(PROOF.dupGroups().length, 0), delta: t('dup.kpi.groupsNote'), deltaIcon: '⚠', deltaCls: 'warn' },
       { label: t('dup.kpi.involved'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.involvedNote', { p: dupRate }), deltaIcon: '⏳', deltaCls: 'warn' },
-      { label: t('dup.kpi.blocked'), value: fmtNum(dups.length, 0), delta: t('dup.kpi.blockedNote'), deltaIcon: '⛔', deltaCls: 'bad' },
+      { label: t('dup.kpi.blocked'), value: fmtNum(PROOF.blockedMitigation(), 1) + ' tCO2e', delta: t('dup.kpi.blockedNote', { eur: fmtNum(PROOF.blockedMitigation() * PROOF.carbonFactors().priceEUR, 0) }), deltaIcon: '⛔', deltaCls: 'bad' },
       { label: t('dup.kpi.precision'), value: '96.2%', delta: t('dup.kpi.precisionNote'), deltaIcon: '✓', deltaCls: 'good' }
     ];
     tiles.forEach(o => kpi.appendChild(statTile(o)));
@@ -625,6 +680,15 @@ function buildDup(){
       });
       item.appendChild(cmp);
 
+      /* 拦截金额:幻影积分 × EU ETS 参考价(公开因子,参考估算) */
+      const blockedT = g.dups.reduce((a, d) => a + (d.tco2e || 0), 0);
+      if(blockedT > 0){
+        const blk = document.createElement('div');
+        blk.className = 'dup-blocked';
+        blk.innerHTML = '<b>⛔</b><span>' + t('dup.blocked', { t: fmtNum(blockedT, 1), eur: fmtNum(blockedT * PROOF.carbonFactors().priceEUR, 0) }) + '</span>';
+        item.appendChild(blk);
+      }
+
       const act = document.createElement('div');
       act.className = 'dup-actions';
       if(state){
@@ -647,6 +711,8 @@ function buildDup(){
           render();
           if(window.__renderQueue) window.__renderQueue();
           if(window.__refreshOverview) window.__refreshOverview();
+          if(window.__renderMap) window.__renderMap();
+          if(window.__renderAnalytics) window.__renderAnalytics();
         });
         act.appendChild(ok); act.appendChild(fp);
       }
@@ -671,9 +737,184 @@ function buildDup(){
 /* ============================================================
    分析
    ============================================================ */
+let HIER = { level: 0, country: null, city: null, org: null };
+let GAP_SCOPE = 'global';
+
 function buildAnalytics(){
   const sec = $('#tab-analytics');
   sec.innerHTML = '';
+
+  /* 分层钻取(组织 → 城市 → 国家 → 全球)+ 覆盖缺口分析 */
+  const g0 = document.createElement('div');
+  g0.className = 'grid-2';
+  sec.appendChild(g0);
+  const hierCard = card(g0, t('an.hier.title'), t('an.hier.sub'));
+  const hierBody = hierCard.body;
+  const gapCard = card(g0, t('an.gap.title'), t('an.gap.sub'));
+  const gapBody = gapCard.body;
+  gapBody.classList.add('gap-body');
+
+  function renderHier(){
+    hierBody.innerHTML = '';
+    /* 面包屑 */
+    const crumb = document.createElement('div');
+    crumb.className = 'hier-crumb';
+    const levels = [{ label: t('an.hier.global'), click: () => { HIER = { level: 0, country: null, city: null, org: null }; renderHier(); } }];
+    if(HIER.country != null) levels.push({ label: countryName(HIER.country), click: () => { HIER = { level: 1, country: HIER.country, city: null, org: null }; renderHier(); } });
+    if(HIER.city != null) levels.push({ label: lb(PROOF.city(HIER.city)), click: () => { HIER = { level: 2, country: HIER.country, city: HIER.city, org: null }; renderHier(); } });
+    if(HIER.org != null) levels.push({ label: HIER.org === 'individual' ? t('an.hier.individual') : orgName(HIER.org), click: null });
+    levels.forEach((l, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (i === levels.length - 1 ? ' active' : '');
+      b.textContent = l.label;
+      if(l.click) b.addEventListener('click', l.click);
+      crumb.appendChild(b);
+    });
+    hierBody.appendChild(crumb);
+
+    const mkRow = (icon, name, sub, stat, click) => {
+      const row = document.createElement('div');
+      row.className = 'hier-row';
+      row.innerHTML = '<div class="hier-name"><span class="hier-ico">' + icon + '</span><span>' + name + '</span>' +
+        (sub ? '<em class="hier-sub">' + sub + '</em>' : '') + '</div>' +
+        '<span class="hier-counts"><b>' + stat.count + '</b>' +
+        '<span style="color:' + PROOF.statuses.verified.text + '">✓' + stat.verified + '</span>' +
+        '<span style="color:' + PROOF.statuses.flagged.text + '">⚠' + stat.flagged + '</span>' +
+        '<span style="color:' + PROOF.statuses.rejected.text + '">✗' + stat.rejected + '</span></span>' +
+        '<span class="hier-avg">' + fmtNum(stat.avg, 1) + '</span>' +
+        '<span class="hier-chevron">›</span>';
+      row.addEventListener('click', click);
+      hierBody.appendChild(row);
+    };
+
+    let rows = null;
+    if(HIER.level === 0){
+      rows = PROOF.countryRows().map(r => ({ icon: '🌐', name: lb(r.name), sub: null, stat: r,
+        click: () => { HIER = { level: 1, country: r.key, city: null, org: null }; renderHier(); } }));
+    } else if(HIER.level === 1){
+      rows = PROOF.cityRows(HIER.country).map(r => ({ icon: '🏙️', name: lb(r.name), sub: null, stat: r,
+        click: () => { HIER = { level: 2, country: HIER.country, city: r.key, org: null }; renderHier(); } }));
+    } else if(HIER.level === 2){
+      rows = PROOF.orgRows(HIER.city).map(r => ({
+        icon: r.key === 'individual' ? '🙂' : (TYPE_ICONS[r.type] || '🏢'),
+        name: r.key === 'individual' ? t('an.hier.individual') : lb(r.name),
+        sub: r.key === 'individual' ? null : t('org.type.' + r.type),
+        stat: r,
+        click: () => { HIER = { level: 3, country: HIER.country, city: HIER.city, org: r.key }; renderHier(); }
+      }));
+    }
+    if(rows === null){
+      /* 组织层:直接列出该组织的提交 */
+      const subs = PROOF.scopeSubs(HIER.country, HIER.city, HIER.org);
+      if(!subs.length){
+        const p = document.createElement('p');
+        p.className = 'muted-text';
+        p.textContent = t('an.hier.none');
+        hierBody.appendChild(p);
+      }
+      subs.slice().sort((a, b) => b.time - a.time).forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'feed-row';
+        const th = photoThumb(s, 56);
+        const info = document.createElement('div');
+        info.className = 'feed-info';
+        const top = document.createElement('div');
+        top.className = 'feed-top';
+        const idEl = document.createElement('b');
+        idEl.textContent = s.id;
+        top.appendChild(idEl);
+        top.appendChild(lvBadge(s.status));
+        top.appendChild(actTag(s.action));
+        const meta = document.createElement('div');
+        meta.className = 'feed-meta';
+        meta.textContent = s.submitter + ' · ' + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
+        info.appendChild(top); info.appendChild(meta);
+        row.appendChild(th); row.appendChild(info);
+        row.addEventListener('click', () => openDrawer(s.id));
+        hierBody.appendChild(row);
+      });
+    } else if(!rows.length){
+      const p = document.createElement('p');
+      p.className = 'muted-text';
+      p.textContent = t('an.hier.none');
+      hierBody.appendChild(p);
+    } else {
+      rows.forEach(r => mkRow(r.icon, r.name, r.sub, r.stat, r.click));
+    }
+  }
+
+  function renderGap(){
+    gapBody.innerHTML = '';
+    const scopes = PROOF.gapScopes();
+    const row = document.createElement('div');
+    row.className = 'chip-row';
+    scopes.forEach(sc => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (GAP_SCOPE === sc.key ? ' active' : '');
+      b.textContent = sc.key === 'global' ? t('an.gap.global') : countryName(sc.key);
+      b.addEventListener('click', () => { GAP_SCOPE = sc.key; renderGap(); });
+      row.appendChild(b);
+    });
+    gapBody.appendChild(row);
+    const scopeLabel = GAP_SCOPE === 'global' ? t('an.gap.global') : countryName(GAP_SCOPE);
+    const cards = PROOF.gapAnalysis(GAP_SCOPE);
+    if(!cards.length){
+      const p = document.createElement('p');
+      p.className = 'muted-text';
+      p.textContent = PROOF.gapScopes().some(s => s.key === GAP_SCOPE) ? t('an.gap.balanced') : t('an.gap.none');
+      gapBody.appendChild(p);
+      return;
+    }
+    cards.forEach(cd => {
+      const c = document.createElement('div');
+      c.className = 'gap-card';
+      const head = document.createElement('div');
+      head.className = 'gap-head';
+      const title = document.createElement('b');
+      const tag = document.createElement('span');
+      tag.className = 'gap-tag';
+      head.innerHTML = '<span class="gap-ico">💡</span>';
+      head.appendChild(title); head.appendChild(tag);
+      c.appendChild(head);
+      const text = document.createElement('p');
+      text.className = 'gap-text';
+      c.appendChild(text);
+      let bars;
+      if(cd.kind === 'cat'){
+        title.textContent = t('gap.card.cat.title', { scope: scopeLabel, weakCat: catName(cd.weakCat) });
+        tag.textContent = t('gap.tag.cat');
+        text.textContent = t('gap.card.cat.text', {
+          scope: scopeLabel, domCat: catName(cd.domCat), weakCat: catName(cd.weakCat),
+          d: cd.d, w: cd.w, suggest: ACT[cd.suggest].icon + ' ' + t('act.' + cd.suggest)
+        });
+        bars = [
+          { label: catName(cd.domCat), color: CAT[cd.domCat].color, v: cd.d },
+          { label: catName(cd.weakCat), color: CAT[cd.weakCat].color, v: cd.w }
+        ];
+      } else {
+        title.textContent = t('gap.card.action.title', { scope: scopeLabel, weak: t('act.' + cd.weak) });
+        tag.textContent = t('gap.tag.action');
+        text.textContent = t('gap.card.action.text', {
+          scope: scopeLabel, cat: catName(cd.cat), dom: t('act.' + cd.dom), weak: t('act.' + cd.weak), d: cd.d, w: cd.w
+        });
+        bars = [
+          { label: t('act.' + cd.dom), color: ACT[cd.dom].color, v: cd.d },
+          { label: t('act.' + cd.weak), color: ACT[cd.weak].color, v: cd.w }
+        ];
+      }
+      bars.forEach(bb => {
+        const r = document.createElement('div');
+        r.className = 'gap-bar-row';
+        r.innerHTML = '<span class="gname">' + bb.label + '</span><i class="gap-track"><em style="width:' + bb.v + '%;background:' + bb.color + '"></em></i><b>' + bb.v + '%</b>';
+        c.appendChild(r);
+      });
+      gapBody.appendChild(c);
+    });
+  }
+
+  renderHier();
+  renderGap();
+  window.__renderAnalytics = () => { renderHier(); renderGap(); };
 
   const g1 = document.createElement('div');
   g1.className = 'grid-2-1';
@@ -754,6 +995,351 @@ function buildAnalytics(){
   mNote.className = 'summary-note';
   mNote.textContent = t('drawer.agent.hint');
   mCard.body.appendChild(mNote);
+
+  /* 分数校准卡:分箱 vs 自动通过 + 演示人工一致率参考线 */
+  const g4 = document.createElement('div');
+  g4.className = 'grid-2';
+  sec.appendChild(g4);
+  const calCard = card(g4, t('an.cal.title'), t('an.cal.sub'));
+  calCard.body.innerHTML = '';
+  const calRows = PROOF.calibration();
+  const maxCount = Math.max(1, ...calRows.map(r => r.count));
+  const maxAuto = Math.max(1, ...calRows.map(r => r.autoPass));
+  const calTable = document.createElement('div');
+  calTable.className = 'cal-bins';
+  calRows.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'cal-bin';
+    row.innerHTML =
+      '<span class="cal-label">' + r.label + '</span>' +
+      '<span class="cal-track c1" title="' + t('an.cal.col.subs') + ' ' + r.count + '"><i style="width:' + (r.count / maxCount * 100) + '%"></i><b>' + r.count + '</b></span>' +
+      '<span class="cal-track c2" title="' + t('an.cal.col.auto') + ' ' + r.autoPass + '"><i style="width:' + (r.autoPass / maxAuto * 100) + '%"></i><b>' + r.autoPass + '</b></span>' +
+      '<span class="cal-track c3" title="' + t('an.cal.col.agree') + '"><i style="width:' + fmtNum(agreeRate, 1) + '%"></i><b>' + fmtNum(agreeRate, 1) + '%</b></span>';
+    calTable.appendChild(row);
+  });
+  calCard.body.appendChild(calTable);
+  const calLeg = document.createElement('div');
+  calLeg.className = 'cal-legend';
+  calLeg.innerHTML = '<span><i class="c1"></i>' + t('an.cal.col.subs') + '</span><span><i class="c2"></i>' + t('an.cal.col.auto') + '</span><span><i class="c3"></i>' + t('an.cal.agree.demo') + '</span>';
+  calCard.body.appendChild(calLeg);
+  const calNote = document.createElement('p');
+  calNote.className = 'summary-note';
+  calNote.textContent = t('an.cal.note');
+  calCard.body.appendChild(calNote);
+
+  /* 行动碳参考因子表(公开来源 + 年份;参考估算,非已发放积分) */
+  const carbonCard = card(g4, t('carbon.table.title'), t('carbon.table.sub'));
+  carbonCard.body.innerHTML = '';
+  const C = PROOF.carbonFactors();
+  const ctb = document.createElement('div');
+  ctb.className = 'chart-table';
+  ctb.innerHTML = '<table><thead><tr><th>' + t('table.action') + '</th><th>tCO2e</th><th>' + t('carbon.col.unit') + '</th><th>' + t('carbon.col.source') + ' · ' + t('carbon.col.year') + '</th><th>' + t('carbon.col.value') + '</th></tr></thead><tbody></tbody></table>';
+  PROOF.actions.forEach(a => {
+    const f = C.actions[a.key];
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + a.icon + ' ' + t('act.' + a.key) + '</td>' +
+      '<td><b>' + fmtNum(f.t, 1) + '</b></td>' +
+      '<td>' + lb(f.unit) + '</td>' +
+      '<td style="color:var(--text-muted);font-size:10.5px">' + lb(f.source) + ' (' + f.year + ')</td>' +
+      '<td>€' + fmtNum(f.t * C.priceEUR, 0) + '</td>';
+    ctb.querySelector('tbody').appendChild(tr);
+  });
+  carbonCard.body.appendChild(ctb);
+  const cNote = document.createElement('p');
+  cNote.className = 'summary-note';
+  cNote.textContent = t('carbon.ref') + ' · EU ETS €' + C.priceEUR + '/tCO2e (2024–2026)';
+  carbonCard.body.appendChild(cNote);
+}
+
+/* ============================================================
+   行动地图(全球 → 国家 → 城市 · 日期回放)
+   ============================================================ */
+let MAP_STATE = { country: null, city: null, date: null };
+
+function buildMap(){
+  const sec = $('#tab-map');
+  sec.innerHTML = '';
+  if(typeof MAP_DATA === 'undefined' || !MAP_DATA.countries){
+    const c = card(sec, t('map.title'), null);
+    const p = document.createElement('p');
+    p.className = 'muted-text';
+    p.textContent = t('map.nomap');
+    c.body.appendChild(p);
+    return;
+  }
+
+  const kpi = document.createElement('div');
+  kpi.className = 'kpi-grid';
+  kpi.id = 'map-kpis';
+  sec.appendChild(kpi);
+
+  const layout = document.createElement('div');
+  layout.className = 'map-layout';
+  sec.appendChild(layout);
+
+  const mapCard = card(layout, t('map.title'), t('map.sub'));
+  const mapBody = mapCard.body;
+  const side = document.createElement('div');
+  side.className = 'map-side';
+  layout.appendChild(side);
+  const detailCard = card(side, t('map.rank'), t('map.hint'));
+  const detailBody = detailCard.body;
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const mapStats = PROOF.mapCountryStats();
+  const fillOf = v => v <= 0 ? '#eef1f4' : RAMP_BLUE[Math.min(12, Math.ceil(Math.log2(v + 1) * 2))];
+
+  function renderMapSvg(){
+    mapBody.innerHTML = '';
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('viewBox', '-180 -58 360 148');
+    svg.classList.add('map-svg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', t('map.title'));
+    const bg = document.createElementNS(SVGNS, 'rect');
+    bg.setAttribute('x', -180); bg.setAttribute('y', -58);
+    bg.setAttribute('width', 360); bg.setAttribute('height', 148);
+    bg.setAttribute('fill', '#f7f9fb');
+    svg.appendChild(bg);
+    (MAP_DATA.countries || []).forEach(cn => {
+      const st = mapStats[cn.name];
+      const p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', cn.d);
+      p.setAttribute('fill', st ? fillOf(st.verified) : '#eef1f4');
+      p.setAttribute('stroke', MAP_STATE.country === cn.name ? '#0b0b0b' : '#d5d9dd');
+      p.setAttribute('stroke-width', MAP_STATE.country === cn.name ? 0.7 : 0.3);
+      p.classList.add('map-path');
+      p.addEventListener('click', () => {
+        if(!st) return;
+        MAP_STATE = { country: cn.name, city: null, date: null };
+        renderMap();
+      });
+      p.addEventListener('mousemove', ev => {
+        const rows = [{ title: mapCountryName(cn) }];
+        if(st){
+          ['verified', 'flagged', 'rejected', 'pending'].forEach(k2 => {
+            rows.push({ color: PROOF.statuses[k2].color, name: t('status.' + k2), value: String(st[k2]) });
+          });
+        } else {
+          rows.push({ color: '#c3c2b7', name: t('map.nodata'), value: '0' });
+        }
+        showTip(mapBody, ev, rows);
+      });
+      p.addEventListener('mouseleave', hideTip);
+      svg.appendChild(p);
+    });
+    /* 城市行动点:点大小 = 提交数 */
+    PROOF.cities.forEach((cc, i) => {
+      const n = PROOF.submissions.filter(s => s.city === i).length;
+      if(!n) return;
+      const g = document.createElementNS(SVGNS, 'g');
+      g.classList.add('map-pin');
+      const r = 3 + Math.sqrt(n) * 1.1;
+      const halo = document.createElementNS(SVGNS, 'circle');
+      halo.setAttribute('cx', cc.lon); halo.setAttribute('cy', -cc.lat);
+      halo.setAttribute('r', r + 2.2);
+      halo.setAttribute('fill', 'rgba(42,120,214,0.16)');
+      const dot = document.createElementNS(SVGNS, 'circle');
+      dot.setAttribute('cx', cc.lon); dot.setAttribute('cy', -cc.lat);
+      dot.setAttribute('r', r);
+      dot.setAttribute('fill', '#2a78d6');
+      dot.setAttribute('stroke', '#fff');
+      dot.setAttribute('stroke-width', 0.45);
+      if(MAP_STATE.city === i){
+        dot.setAttribute('stroke', '#0b0b0b');
+        dot.setAttribute('stroke-width', 0.9);
+      }
+      g.appendChild(halo); g.appendChild(dot);
+      g.addEventListener('click', ev => {
+        ev.stopPropagation();
+        MAP_STATE = { country: cc.country.en, city: i, date: null };
+        renderMap();
+      });
+      g.addEventListener('mousemove', ev => {
+        const st2 = { verified: 0, flagged: 0, rejected: 0, pending: 0 };
+        PROOF.submissions.filter(s => s.city === i).forEach(s => st2[s.status]++);
+        showTip(mapBody, ev, [{ title: lb(cc) + ' · ' + lb(cc.country) }].concat(
+          ['verified', 'flagged', 'rejected', 'pending'].map(k2 => ({ color: PROOF.statuses[k2].color, name: t('status.' + k2), value: String(st2[k2]) }))
+        ));
+      });
+      g.addEventListener('mouseleave', hideTip);
+      svg.appendChild(g);
+    });
+    mapBody.appendChild(svg);
+    /* 图例 */
+    const lg = document.createElement('div');
+    lg.className = 'map-legend';
+    lg.innerHTML = '<span>' + t('map.legend') + '</span>';
+    [0, 1, 2, 4, 8, 16].forEach(v => {
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = fillOf(v);
+      sw.title = '~' + v;
+      lg.appendChild(sw);
+    });
+    const note = document.createElement('span');
+    note.textContent = '· ' + t('map.pin.hint');
+    lg.appendChild(note);
+    mapBody.appendChild(lg);
+  }
+
+  const mkListRow = s => {
+    const row = document.createElement('div');
+    row.className = 'feed-row';
+    const th = photoThumb(s, 56);
+    const info = document.createElement('div');
+    info.className = 'feed-info';
+    const top = document.createElement('div');
+    top.className = 'feed-top';
+    const idEl = document.createElement('b');
+    idEl.textContent = s.id;
+    top.appendChild(idEl);
+    top.appendChild(lvBadge(s.status));
+    top.appendChild(actTag(s.action));
+    if(s.org) top.appendChild(orgTag(s.org));
+    const meta = document.createElement('div');
+    meta.className = 'feed-meta';
+    meta.textContent = s.submitter + ' · ' + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
+    info.appendChild(top); info.appendChild(meta);
+    row.appendChild(th); row.appendChild(info);
+    row.addEventListener('click', () => openDrawer(s.id));
+    return row;
+  };
+
+  function renderDetail(){
+    detailBody.innerHTML = '';
+    if(!MAP_STATE.country){
+      detailCard.root.querySelector('h3').textContent = t('map.rank');
+      detailCard.root.querySelector('.card-sub').textContent = t('map.hint');
+      const tb = document.createElement('div');
+      tb.className = 'chart-table';
+      tb.innerHTML = '<table><thead><tr><th>' + t('map.rank.col.country') + '</th><th>' + t('map.rank.col.verified') + '</th><th>' + t('map.rank.col.dup') + '</th><th>' + t('map.rank.col.rejected') + '</th><th>' + t('map.rank.col.avg') + '</th></tr></thead><tbody></tbody></table>';
+      const tbody = tb.querySelector('tbody');
+      PROOF.countryRows().forEach(r => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.innerHTML = '<td><b>' + lb(r.name) + '</b></td>' +
+          '<td style="color:' + PROOF.statuses.verified.text + '">✓ ' + r.verified + '</td>' +
+          '<td style="color:' + PROOF.statuses.flagged.text + '">⚠ ' + r.flagged + '</td>' +
+          '<td style="color:' + PROOF.statuses.rejected.text + '">✗ ' + r.rejected + '</td>' +
+          '<td>' + fmtNum(r.avg, 1) + '</td>';
+        tr.addEventListener('click', () => { MAP_STATE = { country: r.key, city: null, date: null }; renderMap(); });
+        tbody.appendChild(tr);
+      });
+      detailBody.appendChild(tb);
+      return;
+    }
+    const st = mapStats[MAP_STATE.country];
+    const cInfo = PROOF.cities.find(c => c.country.en === MAP_STATE.country);
+    detailCard.root.querySelector('h3').textContent = t('map.detail.title', { c: lb(cInfo.country) });
+    detailCard.root.querySelector('.card-sub').textContent = t('map.detail.sub', { v: st.verified, f: st.flagged, r: st.rejected, p: st.pending });
+    const back = document.createElement('button');
+    back.className = 'link-btn';
+    back.style.marginBottom = '6px';
+    back.textContent = t('map.clear');
+    back.addEventListener('click', () => { MAP_STATE = { country: null, city: null, date: null }; renderMap(); });
+    detailBody.appendChild(back);
+    /* 城市筛选 */
+    const cf = document.createElement('div');
+    cf.className = 'filter-row';
+    cf.innerHTML = '<span class="filter-label">' + t('map.city.filter') + '</span><span class="chip-row" id="map-cities"></span>';
+    const cRow = cf.querySelector('#map-cities');
+    const allB = document.createElement('button');
+    allB.className = 'chip' + (MAP_STATE.city == null ? ' active' : '');
+    allB.textContent = t('map.city.all');
+    allB.addEventListener('click', () => { MAP_STATE.city = null; MAP_STATE.date = null; renderMap(); });
+    cRow.appendChild(allB);
+    Object.keys(st.cities).forEach(cIdx => {
+      const cc = PROOF.city(+cIdx);
+      const b = document.createElement('button');
+      b.className = 'chip' + (MAP_STATE.city === +cIdx ? ' active' : '');
+      b.textContent = lb(cc) + ' (' + st.cities[cIdx] + ')';
+      b.addEventListener('click', () => { MAP_STATE.city = +cIdx; MAP_STATE.date = null; renderMap(); });
+      cRow.appendChild(b);
+    });
+    detailBody.appendChild(cf);
+    /* 日期回放 */
+    const scope = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null);
+    const days = {};
+    scope.forEach(s => { const k = dateKey(s.time); (days[k] = days[k] || []).push(s); });
+    const dKeys = Object.keys(days).sort();
+    const ds = document.createElement('div');
+    ds.className = 'map-sub-title';
+    ds.textContent = t('map.dates');
+    detailBody.appendChild(ds);
+    if(!dKeys.length){
+      const p = document.createElement('p');
+      p.className = 'muted-text';
+      p.textContent = t('map.list.empty');
+      detailBody.appendChild(p);
+      return;
+    }
+    const strip = document.createElement('div');
+    strip.className = 'dstrip';
+    const maxDay = Math.max(...dKeys.map(k => days[k].length));
+    dKeys.forEach(k => {
+      const list = days[k];
+      const bar = document.createElement('div');
+      bar.className = 'dbar' + (MAP_STATE.date === k ? ' sel' : '');
+      const inner = document.createElement('div');
+      inner.className = 'bar';
+      ['verified', 'pending', 'flagged', 'rejected'].forEach(stKey => {
+        const n = list.filter(s => s.status === stKey).length;
+        if(!n) return;
+        const seg = document.createElement('div');
+        seg.className = 'seg';
+        seg.style.height = Math.max(3, Math.round(n / maxDay * 74)) + 'px';
+        seg.style.background = PROOF.statuses[stKey].color;
+        seg.title = t('status.' + stKey) + ' ' + n;
+        inner.appendChild(seg);
+      });
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = k.slice(5).replace('-', '/');
+      bar.appendChild(inner); bar.appendChild(lbl);
+      bar.addEventListener('click', () => {
+        MAP_STATE.date = MAP_STATE.date === k ? null : k;
+        renderMap();
+      });
+      strip.appendChild(bar);
+    });
+    detailBody.appendChild(strip);
+    /* 行动清单 */
+    const lt = document.createElement('div');
+    lt.className = 'map-sub-title';
+    lt.textContent = t('map.list.title') + (MAP_STATE.date ? ' · ' + MAP_STATE.date : '');
+    detailBody.appendChild(lt);
+    const list = (MAP_STATE.date ? days[MAP_STATE.date] : scope) || [];
+    if(!list.length){
+      const p = document.createElement('p');
+      p.className = 'muted-text';
+      p.textContent = t('map.list.empty');
+      detailBody.appendChild(p);
+    } else {
+      list.slice().sort((a, b) => b.time - a.time).forEach(mkListRow);
+    }
+  }
+
+  function renderMap(){
+    renderMapSvg();
+    renderDetail();
+    const scope = MAP_STATE.country ? PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null) : PROOF.submissions;
+    const kpiEl = $('#map-kpis');
+    kpiEl.innerHTML = '';
+    const cnt = st2 => scope.filter(s => s.status === st2).length;
+    const avg = scope.length ? scope.reduce((a, s) => a + s.score, 0) / scope.length : 0;
+    const tiles = [
+      { label: t('map.kpi.total'), value: fmtNum(scope.length, 0), delta: t('map.pin.hint'), deltaIcon: '📍', deltaCls: 'plain' },
+      { label: t('map.kpi.verified'), value: fmtNum(cnt('verified'), 0), delta: t('kpi.rateNote'), deltaIcon: '✓', deltaCls: 'good' },
+      { label: t('map.kpi.dup'), value: fmtNum(cnt('flagged'), 0), delta: t('kpi.dupNote'), deltaIcon: '⚠', deltaCls: 'warn' },
+      { label: t('map.kpi.rejected'), value: fmtNum(cnt('rejected'), 0), delta: t('an.th.3'), deltaIcon: '✗', deltaCls: 'bad' },
+      { label: t('map.kpi.avg'), value: fmtNum(avg, 1), delta: t('kpi.avgNote'), deltaIcon: '◈', deltaCls: 'plain' }
+    ];
+    tiles.forEach(o => kpiEl.appendChild(statTile(o)));
+  }
+
+  window.__renderMap = renderMap;
+  renderMap();
 }
 
 /* ============================================================
@@ -769,41 +1355,65 @@ function agentSteps(sub){
     text: (LANG === 'zh' ? '读取 ' : 'Reading ') + sub.id + ':设备 ' + sub.device + ',GPS ' + t(sub.gpsOk ? 'drawer.gps.ok' : 'drawer.gps.bad') + ',指纹 ' + sub.hash + ',申报地点 ' + lb(city) + '(' + lb(city.country) + ')。'
   });
 
-  steps.push({
-    icon: '🔬', title: 'agent.step.forensics', chips: ['ELA.analyze', 'NoiseMap.diff', 'JpegQC.probe'],
-    text: sub.subs.auth < 70
-      ? (LANG === 'zh' ? 'ELA 误差级分析检出重压缩痕迹,噪声分布与设备型号特征不一致;真实性得分 ' + sub.subs.auth + ',低于 70,存在后期加工风险。' : 'ELA analysis detects re-compression artifacts; noise distribution mismatches the device profile. Authenticity ' + sub.subs.auth + ' (< 70) — manipulation risk.')
-      : (LANG === 'zh' ? 'ELA 与噪声谱分析未发现合成或重压缩痕迹,边缘梯度连续;真实性得分 ' + sub.subs.auth + '。' : 'ELA and noise-spectrum analysis show no compositing or re-compression; edge gradients are continuous. Authenticity ' + sub.subs.auth + '.')
-  });
+  /* ---- 第 2 步:取证复核(会话上传 = 实测取证;档案快照如实说明) ---- */
+  const fx = sub.forensics;
+  let fxText, fxChips, fxImg = null;
+  if(fx){
+    fxChips = ['ELA.compute', 'EXIF.parse', 'C2PA.scan'];
+    fxText = t('agent.fx.ela', {
+      m: fx.ela ? fmtNum(fx.ela.meanErr, 1) : '—',
+      p: fx.ela ? fmtNum(fx.ela.highRatio * 100, 0) + '%' : '—'
+    });
+    if(fx.ela && String(sub.mime || '').toLowerCase().includes('png')) fxText += t('agent.fx.ela.png');
+    else if(fx.ela) fxText += t('agent.fx.ela.' + (fx.ela.highRatio > 0.3 ? 'high' : (fx.ela.highRatio < 0.12 ? 'low' : 'mid')));
+    if(fx.exif && fx.exif.hasExif){
+      fxText += t('agent.fx.exif.ok', { make: fx.exif.make || '—', model: fx.exif.model || '—', t: fx.exif.dateTimeOriginal || fx.exif.dateTime || '—' });
+      if(fx.exif.software) fxText += t('agent.fx.exif.sw', { sw: fx.exif.software });
+    } else {
+      fxText += t('agent.fx.exif.missing');
+    }
+    fxText += t('agent.fx.prov', { s: (fx.provenance && fx.provenance.c2pa) ? t('agent.fx.prov.yes') : t('agent.fx.prov.no') });
+    if(fx.ela && fx.ela.heatmap) fxImg = fx.ela.heatmap;
+  } else {
+    fxChips = ['archive.snapshot'];
+    fxText = t('agent.fx.archive');
+  }
+  steps.push({ icon: '🔬', title: 'agent.step.forensics', chips: fxChips, text: fxText, img: fxImg });
 
-  let geoTxt;
-  if(dup){
+  /* ---- 第 3 步:地理交叉验证(EXIF GPS 实测 haversine;否则演示派生) ---- */
+  let geoTxt, geoChips;
+  if(fx && fx.gpsKm != null){
+    geoTxt = t('agent.geo.gps', { city: lb(city), km: fmtNum(fx.gpsKm, 1), loc: sub.subs.loc });
+    geoChips = ['GPS.read', 'Haversine.dist'];
+  } else if(dup){
     geoTxt = LANG === 'zh'
       ? '坐标与原始提交 ' + dup.base + ' 一致(网格 ' + city.grid + '),但提交时间不同 — 支持"同一现场多次申报"假设。'
       : 'Coordinates match original ' + dup.base + ' (grid ' + city.grid + ') but the timestamp differs — consistent with a resubmission.';
-  } else if(!sub.gpsOk || sub.subs.loc < 60){
-    geoTxt = LANG === 'zh'
-      ? 'GPS ' + (sub.gpsOk ? '有效但坐标' : '缺失/异常,坐标') + ' 落在 ' + city.grid + ' 边缘,与申报登记网格一致性得分 ' + sub.subs.loc + '(< 60),建议实地复核。'
-      : 'GPS ' + (sub.gpsOk ? 'valid but coordinates fall' : 'missing/suspicious; coordinates fall') + ' at the edge of ' + city.grid + '; geolocation consistency ' + sub.subs.loc + ' (< 60) — field re-check advised.';
+    geoChips = ['Grid.demo'];
   } else {
-    geoTxt = LANG === 'zh'
-      ? '坐标位于 ' + lb(city) + ' 已登记行动区域(' + city.grid + '),地理一致性得分 ' + sub.subs.loc + ',与申报位置吻合。'
-      : 'Coordinates sit inside ' + lb(city) + '\'s registered action zone (' + city.grid + '); geolocation consistency ' + sub.subs.loc + ' — matches the claim.';
+    geoTxt = t('agent.geo.demo', { loc: sub.subs.loc });
+    geoChips = ['GPS.missing', 'Grid.demo'];
   }
-  steps.push({ icon: '📍', title: 'agent.step.geo', chips: ['GeoRegistry.lookup', 'GridMatch.score', 'MapTiles.probe'], text: geoTxt });
+  steps.push({ icon: '📍', title: 'agent.step.geo', chips: geoChips, text: geoTxt });
 
-  const regN = 40 + (strHash(sub.id) % 160);
-  let regTxt;
-  if(dup){
+  /* ---- 第 4 步:登记库比对(真实计数:同城市 + 同行动 + 同季度;未登记组织 → ORG_UNREGISTERED) ---- */
+  const sameQuarter = (a, b) => a.getFullYear() === b.getFullYear() && Math.floor(a.getMonth() / 3) === Math.floor(b.getMonth() / 3);
+  const regN = PROOF.submissions.filter(x => x.action === sub.action && x.city === sub.city && sameQuarter(x.time, sub.time)).length;
+  const isCustomOrg = !!(sub.org && sub.org.startsWith('custom:'));
+  let regTxt, regChips;
+  if(isCustomOrg){
+    regTxt = t('agent.reg.unreg', { name: orgName(sub.org), n: regN });
+    regChips = ['ClimateRegistry.query', 'ORG_UNREGISTERED'];
+  } else if(dup){
     regTxt = LANG === 'zh'
-      ? '登记库 pHash 索引命中:与 ' + dup.base + ' 汉明距离 ' + (dup.type === 'exact' ? '0(哈希一致)' : '≤ 4') + ',相似度 ' + fmtNum(dup.sim * 100, 0) + '%。同一行动已存在有效登记,本次申报构成重复。'
-      : 'Registry pHash index hit: Hamming distance vs ' + dup.base + ' = ' + (dup.type === 'exact' ? '0 (exact hash)' : '≤ 4') + ', similarity ' + fmtNum(dup.sim * 100, 0) + '%. A valid registration already exists — this submission is a duplicate.';
+      ? '登记库 pHash-DCT 索引命中:与 ' + dup.base + ' 汉明距离 ' + (dup.type === 'exact' ? '0(哈希一致)' : (dup.hd != null ? dup.hd : '≤ 4(档案)')) + ',相似度 ' + fmtNum(dup.sim * 100, 0) + '%。同一行动已存在有效登记,本次申报构成重复。'
+      : 'Registry pHash-DCT index hit: Hamming distance vs ' + dup.base + ' = ' + (dup.type === 'exact' ? '0 (exact hash)' : (dup.hd != null ? dup.hd : '≤ 4 (archive)')) + ', similarity ' + fmtNum(dup.sim * 100, 0) + '%. A valid registration already exists — this submission is a duplicate.';
+    regChips = ['ClimateRegistry.query', 'pHash-DCT.search'];
   } else {
-    regTxt = LANG === 'zh'
-      ? '登记库本季度该网格已登记 ' + regN + ' 个同类行动;本次提交与既有条目不重叠,未见重复登记。'
-      : 'The registry shows ' + regN + ' similar actions registered in this grid this quarter; this submission overlaps none of them.';
+    regTxt = t('agent.reg.real', { n: regN });
+    regChips = ['ClimateRegistry.query', 'pHash-DCT.search'];
   }
-  steps.push({ icon: '🗂️', title: 'agent.step.registry', chips: ['ClimateRegistry.query', 'pHash.search'], text: regTxt });
+  steps.push({ icon: '🗂️', title: 'agent.step.registry', chips: regChips, text: regTxt });
 
   let verdict;
   if(dup){
@@ -813,7 +1423,7 @@ function agentSteps(sub){
         ? (LANG === 'zh' ? '哈希一致,同一文件重复提交。建议驳回并拦截碳积分发放。' : 'Exact hash — the same file was submitted twice. Recommend rejecting and blocking credit issuance.')
         : (LANG === 'zh' ? 'pHash 与视觉嵌入双通道命中,判定为同一照片经变换后重传。建议驳回并拦截积分发放。' : 'Both pHash and visual embeddings match — the same photo re-uploaded after transformation. Recommend rejecting and blocking credit issuance.'),
       evidence: [
-        'pHash 64-bit · Hamming ' + (dup.type === 'exact' ? '0' : '3'),
+        'pHash-DCT 64-bit · Hamming ' + (dup.type === 'exact' ? '0' : (dup.hd != null ? dup.hd : 'n/a (archive)')),
         'similarity ' + fmtNum(dup.sim * 100, 0) + '% vs ' + dup.base,
         'same device · ' + sub.device,
         'ClimateRegistry: valid entry exists'
@@ -822,20 +1432,31 @@ function agentSteps(sub){
   } else if(sub.subs.auth < 70 || sub.score < 60){
     verdict = {
       status: 'rejected', conf: 82,
-      rationale: LANG === 'zh' ? '图像取证与综合评分均不达标,建议驳回。' : 'Forensics and composite score both fail the bar — recommend rejecting.',
-      evidence: ['ELA re-compression artifacts', 'authenticity ' + sub.subs.auth, 'composite ' + sub.score + ' < 60']
+      rationale: LANG === 'zh' ? '取证与综合评分均不达标,建议驳回。' : 'Forensics and composite score both fail the bar — recommend rejecting.',
+      evidence: ['authenticity ' + sub.subs.auth, 'composite ' + sub.score + ' < 60']
     };
   } else if(!sub.gpsOk || sub.subs.loc < 60){
     verdict = {
       status: 'pending', conf: 68,
       rationale: LANG === 'zh' ? '地理一致性存疑,建议保留待复核并安排实地核验。' : 'Geolocation consistency is questionable — recommend holding for review with a field check.',
-      evidence: ['GPS ' + (sub.gpsOk ? 'valid but outside registered grid' : 'missing/suspicious'), 'geolocation score ' + sub.subs.loc]
+      evidence: ['GPS ' + (sub.gpsOk ? 'valid but far from claimed city' : 'missing/suspicious'), 'geolocation score ' + sub.subs.loc]
+    };
+  } else if(isCustomOrg){
+    /* 未登记组织:自动验证降级为人工复核,补验行动地点与授权 */
+    verdict = {
+      status: 'pending', conf: 64,
+      rationale: t('agent.unreg.rationale'),
+      evidence: [
+        'ORG_UNREGISTERED: ' + orgName(sub.org),
+        'registry same-action entries: ' + regN,
+        t('agent.unreg.evidence')
+      ]
     };
   } else {
     verdict = {
       status: 'verified', conf: Math.min(96, Math.round(78 + sub.score / 5)),
       rationale: LANG === 'zh' ? '三维验证均通过,登记库无重复,建议通过。' : 'All three models pass and the registry shows no duplicate — recommend approving.',
-      evidence: ['composite ' + sub.score, 'auth ' + sub.subs.auth + ' · action ' + sub.subs.action + ' · loc ' + sub.subs.loc, 'GeoRegistry grid match']
+      evidence: ['composite ' + sub.score, 'auth ' + sub.subs.auth + ' · action ' + sub.subs.action + ' · loc ' + sub.subs.loc, 'registry: no duplicate found']
     };
   }
   return { steps, verdict };
@@ -932,6 +1553,7 @@ function buildAgent(){
     m.innerHTML = '<div class="msg-avatar">✦</div><div class="bubble agent-step">' +
       '<div class="step-title">' + stp.icon + ' ' + t(stp.title) + '</div>' +
       '<div class="bubble-body"></div>' +
+      (stp.img ? '<img class="step-img" src="' + stp.img + '" alt="ELA heatmap">' : '') +
       (chips ? '<div class="bubble-src">' + chips + '</div>' : '') +
       '</div>';
     m.querySelector('.bubble-body').textContent = stp.text;
@@ -1023,12 +1645,12 @@ function buildAgent(){
 /* ============================================================
    提交验证(闭环:上传 → 验证 → 结果与凭据)
    ============================================================ */
-let SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', result: null };
+let SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', orgMode: 'org', org: 'org-gbg', orgCustom: '', orgType: 'community', date: null, result: null };
 
 function buildSubmit(){
   const sec = $('#tab-submit');
   sec.innerHTML = '';
-  SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', result: null };
+  SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', orgMode: 'org', org: 'org-gbg', orgCustom: '', orgType: 'community', date: null, result: null };
 
   /* 步骤条 */
   const stepper = document.createElement('div');
@@ -1143,6 +1765,108 @@ function buildSubmit(){
     nm.addEventListener('input', () => { SUBMIT.name = nm.value; });
     fRow2.appendChild(nm);
     form.appendChild(fRow2);
+
+    /* 提交主体:个人 / 组织 */
+    const fRow3 = document.createElement('div');
+    fRow3.className = 'form-row';
+    fRow3.innerHTML = '<span class="filter-label">' + t('submit.claim.mode') + '</span><span class="chip-row" id="sub-mode"></span>';
+    const mRow = fRow3.querySelector('#sub-mode');
+    [['ind', 'submit.claim.mode.ind'], ['org', 'submit.claim.mode.org']].forEach(([v, k]) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (SUBMIT.orgMode === v ? ' active' : '');
+      b.textContent = t(k);
+      b.addEventListener('click', () => { SUBMIT.orgMode = v; renderStage(); });
+      mRow.appendChild(b);
+    });
+    form.appendChild(fRow3);
+
+    /* 组织选择(组织名义时显示;选择组织自动带出其所在城市;「其他」为未登记组织) */
+    if(SUBMIT.orgMode === 'org'){
+      const fRow4 = document.createElement('div');
+      fRow4.className = 'form-row';
+      fRow4.innerHTML = '<span class="filter-label">' + t('submit.claim.org') + '</span>';
+      const oSel = document.createElement('select');
+      oSel.className = 'txt-in';
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = t('submit.claim.orgPh');
+      ph.disabled = true;
+      ph.selected = !SUBMIT.org;
+      oSel.appendChild(ph);
+      PROOF.orgs.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.key;
+        opt.textContent = lb(o.name) + ' · ' + lb(PROOF.city(o.city)) + ' · ' + lb(PROOF.city(o.city).country);
+        opt.selected = SUBMIT.org === o.key;
+        oSel.appendChild(opt);
+      });
+      /* 「其他」选项:自由文本组织名 → org='custom:<名称>',构成未登记组织风控信号 */
+      const cOpt = document.createElement('option');
+      cOpt.value = '__custom';
+      cOpt.textContent = t('submit.claim.orgOther');
+      cOpt.selected = SUBMIT.org === '__custom';
+      oSel.appendChild(cOpt);
+      oSel.addEventListener('change', () => {
+        const v = oSel.value;
+        if(v === '__custom'){
+          SUBMIT.org = '__custom';
+        } else {
+          SUBMIT.org = v || null;
+          if(SUBMIT.org){
+            const o = ORG[SUBMIT.org];
+            if(o) SUBMIT.city = o.city;
+            sel.value = SUBMIT.city;
+          }
+        }
+        renderStage();
+      });
+      fRow4.appendChild(oSel);
+      form.appendChild(fRow4);
+
+      /* 「其他」选中时:自由文本名称 + 组织类型(NGO / 企业 / 社区 / 个人团体) */
+      if(SUBMIT.org === '__custom'){
+        const fRowC = document.createElement('div');
+        fRowC.className = 'form-row';
+        fRowC.innerHTML = '<span class="filter-label">' + t('submit.claim.orgOther') + '</span>';
+        const ci = document.createElement('input');
+        ci.type = 'text';
+        ci.className = 'txt-in';
+        ci.placeholder = t('submit.claim.orgOtherPh');
+        ci.value = SUBMIT.orgCustom;
+        ci.addEventListener('input', () => { SUBMIT.orgCustom = ci.value; });
+        fRowC.appendChild(ci);
+        fRowC.insertAdjacentHTML('beforeend', '<span class="filter-label">' + t('submit.claim.orgType') + '</span>');
+        const cSel = document.createElement('select');
+        cSel.className = 'txt-in';
+        [['ngo', 'org.type.ngo'], ['company', 'org.type.company'], ['community', 'org.type.community'], ['personal', 'org.type.personal']].forEach(([v, k]) => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = t(k);
+          opt.selected = SUBMIT.orgType === v;
+          cSel.appendChild(opt);
+        });
+        cSel.addEventListener('change', () => { SUBMIT.orgType = cSel.value; });
+        fRowC.appendChild(cSel);
+        form.appendChild(fRowC);
+      }
+    }
+
+    /* 行动日期(用于行动地图的日期回放) */
+    const fRow5 = document.createElement('div');
+    fRow5.className = 'form-row';
+    fRow5.innerHTML = '<span class="filter-label">' + t('submit.claim.date') + '</span>';
+    const dt = document.createElement('input');
+    dt.type = 'date';
+    dt.className = 'txt-in';
+    dt.value = SUBMIT.date || dateKey(new Date());
+    dt.addEventListener('change', () => { SUBMIT.date = dt.value || null; });
+    fRow5.appendChild(dt);
+    const dn = document.createElement('span');
+    dn.className = 'qc-hint';
+    dn.style.marginTop = '0';
+    dn.textContent = t('submit.claim.dateNote');
+    fRow5.appendChild(dn);
+    form.appendChild(fRow5);
     body.appendChild(form);
 
     /* 操作 */
@@ -1151,7 +1875,9 @@ function buildSubmit(){
     const ok = document.createElement('button');
     ok.className = 'btn btn-primary';
     ok.textContent = t('submit.btn');
-    ok.disabled = !(SUBMIT.file && SUBMIT.action);
+    /* 「其他」组织需至少 2 个字符的名称方可提交 */
+    ok.disabled = !(SUBMIT.file && SUBMIT.action &&
+      (SUBMIT.orgMode === 'ind' || (SUBMIT.org && (SUBMIT.org !== '__custom' || SUBMIT.orgCustom.trim().length >= 2))));
     if(ok.disabled) ok.title = t('submit.btn.disabled');
     ok.addEventListener('click', doSubmit);
     const demo = document.createElement('button');
@@ -1180,9 +1906,16 @@ function buildSubmit(){
 
   function doSubmit(){
     if(!SUBMIT.file || !SUBMIT.action) return;
+    if(SUBMIT.orgMode === 'org' && !SUBMIT.org) return;
+    if(SUBMIT.org === '__custom' && SUBMIT.orgCustom.trim().length < 2) return;
     SUBMIT.stage = 2;
     renderStage();
-    const payload = { file: SUBMIT.file, action: SUBMIT.action, city: SUBMIT.city, submitter: SUBMIT.name };
+    const payload = {
+      file: SUBMIT.file, action: SUBMIT.action, city: SUBMIT.city, submitter: SUBMIT.name,
+      org: SUBMIT.orgMode === 'org' ? (SUBMIT.org === '__custom' ? 'custom:' + SUBMIT.orgCustom.trim() : SUBMIT.org) : null,
+      orgType: SUBMIT.orgMode === 'org' && SUBMIT.org === '__custom' ? SUBMIT.orgType : null,
+      date: SUBMIT.date || null
+    };
     const rows = body.querySelectorAll('.pipe-run .row');
     const stagesDone = [false, false, false, false];
     const timers = [500, 1400, 2300, 3200].map((t2, i) => setTimeout(() => {
@@ -1209,6 +1942,8 @@ function buildSubmit(){
         if(window.__refreshOverview) window.__refreshOverview();
         if(window.__renderQueue) window.__renderQueue();
         if(window.__renderDup) window.__renderDup();
+        if(window.__renderMap) window.__renderMap();
+        if(window.__renderAnalytics) window.__renderAnalytics();
       }
     }
   }
@@ -1240,7 +1975,7 @@ function buildSubmit(){
     sb.appendChild(ringBox);
     const bars = document.createElement('div');
     bars.className = 'drawer-subbars';
-    bars.appendChild(subBars(s.subs));
+    bars.appendChild(subBars(s.subs, subSrcs(s)));
     sb.appendChild(bars);
     scoreP.appendChild(sb);
     grid.appendChild(scoreP);
@@ -1267,6 +2002,97 @@ function buildSubmit(){
     grid.appendChild(flagP);
     body.appendChild(grid);
 
+    /* 取证面板:ELA 热力图 + EXIF + 溯源凭证(全部本地实测) */
+    if(s.forensics){
+      const fx = s.forensics;
+      const fxP = document.createElement('div');
+      fxP.className = 'panel';
+      fxP.innerHTML = '<div class="panel-title">🔬 ' + t('forensics.title') + '</div>';
+      const fxGrid = document.createElement('div');
+      fxGrid.className = 'fx-grid';
+
+      /* ELA */
+      const ela = document.createElement('div');
+      ela.className = 'fx-cell';
+      ela.innerHTML = '<div class="fx-title">' + t('forensics.ela') + ' <i class="subbar-src">' + t('about.tag.measured') + '</i></div>';
+      if(fx.ela && fx.ela.heatmap){
+        const im = document.createElement('img');
+        im.className = 'fx-ela-img';
+        im.src = fx.ela.heatmap;
+        im.alt = 'ELA heatmap';
+        ela.appendChild(im);
+        const cap = document.createElement('p');
+        cap.className = 'fx-cap';
+        cap.textContent = t('forensics.ela.desc', { p: fmtNum(fx.ela.highRatio * 100, 0) + '%', m: fmtNum(fx.ela.meanErr, 1) });
+        ela.appendChild(cap);
+        if(String(s.mime || '').toLowerCase().includes('png')){
+          const pngNote = document.createElement('p');
+          pngNote.className = 'fx-cap';
+          pngNote.textContent = t('forensics.ela.pngNote');
+          ela.appendChild(pngNote);
+        }
+      }
+      fxGrid.appendChild(ela);
+
+      /* EXIF(文件自带字符串,必须 textContent 防注入) */
+      const ex = document.createElement('div');
+      ex.className = 'fx-cell';
+      ex.innerHTML = '<div class="fx-title">' + t('forensics.exif') + ' <i class="subbar-src">' + t('about.tag.measured') + '</i></div>';
+      if(fx.exif && fx.exif.hasExif){
+        const rows = [];
+        if(fx.exif.make || fx.exif.model) rows.push([t('drawer.device'), [fx.exif.make, fx.exif.model].filter(Boolean).join(' ')]);
+        if(fx.exif.dateTimeOriginal) rows.push([t('submit.claim.date'), fx.exif.dateTimeOriginal]);
+        if(fx.exif.software) rows.push(['Software', fx.exif.software]);
+        if(fx.exif.gps) rows.push(['GPS', t('forensics.exif.gps', { lat: fx.exif.gps.lat, lon: fx.exif.gps.lon })]);
+        if(fx.gpsKm != null) rows.push([t('forensics.gps.dist'), fmtNum(fx.gpsKm, 1) + ' km']);
+        rows.forEach(r => {
+          const row = document.createElement('div');
+          row.className = 'fx-kv';
+          row.innerHTML = '<span>' + r[0] + '</span>';
+          const b = document.createElement('b');
+          b.textContent = r[1];
+          row.appendChild(b);
+          ex.appendChild(row);
+        });
+      } else {
+        const p = document.createElement('p');
+        p.className = 'fx-cap';
+        p.textContent = t('forensics.exif.none');
+        ex.appendChild(p);
+      }
+      fxGrid.appendChild(ex);
+
+      /* 溯源凭证 */
+      const prov = document.createElement('div');
+      prov.className = 'fx-cell';
+      prov.innerHTML = '<div class="fx-title">' + t('forensics.prov') + ' <i class="subbar-src">' + t('about.tag.measured') + '</i></div>';
+      const pv = fx.provenance || { c2pa: false, xmp: false };
+      const pc = document.createElement('div');
+      pc.className = 'fx-kv';
+      pc.innerHTML = '<span>C2PA</span>';
+      const pcb = document.createElement('b');
+      pcb.textContent = pv.c2pa ? t('forensics.prov.c2pa.yes') : t('forensics.prov.c2pa.no');
+      pc.appendChild(pcb);
+      prov.appendChild(pc);
+      const px = document.createElement('div');
+      px.className = 'fx-kv';
+      px.innerHTML = '<span>XMP</span>';
+      const pxb = document.createElement('b');
+      pxb.textContent = pv.xmp ? t('forensics.prov.xmp.yes') : t('forensics.prov.xmp.no');
+      px.appendChild(pxb);
+      prov.appendChild(px);
+      if(!fx.exif.hasExif && !pv.c2pa && !pv.xmp){
+        const p2 = document.createElement('p');
+        p2.className = 'fx-cap fx-risk';
+        p2.textContent = t('forensics.aiRisk');
+        prov.appendChild(p2);
+      }
+      fxGrid.appendChild(prov);
+
+      fxP.appendChild(fxGrid);
+      body.appendChild(fxP);
+    }
+
     /* 凭据 */
     const rc = document.createElement('div');
     rc.className = 'receipt';
@@ -1285,6 +2111,9 @@ function buildSubmit(){
       '<div class="rc-kv"><span>' + t('submit.receipt.phash') + '</span><b class="mono">' + s.phash + '</b></div>' +
       '<div class="rc-kv"><span>' + t('table.action') + '</span><b>' + ACT[s.action].icon + ' ' + t('act.' + s.action) + '</b></div>' +
       '<div class="rc-kv"><span>' + t('submit.claim.city') + '</span><b>' + lb(PROOF.city(s.city)) + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('drawer.org') + '</span><b>' + orgName(s.org) +
+        (s.org && s.org.startsWith('custom:') ? ' · ' + t('drawer.org.unregistered') + (s.orgType ? ' · ' + t('org.type.' + s.orgType) : '') : '') + '</b></div>' +
+      '<div class="rc-kv"><span>' + t('submit.claim.date') + '</span><b>' + fmtDate(s.time) + '</b></div>' +
       '<div class="rc-kv"><span>' + t('drawer.device') + '</span><b>' + s.device + '</b></div>' +
       '<div class="rc-kv"><span>' + t('drawer.time') + '</span><b>' + fmtTime(s.time) + '</b></div>' +
       '<div class="rc-sep"></div>' +
@@ -1310,7 +2139,8 @@ function buildSubmit(){
     again.className = 'btn btn-ghost';
     again.textContent = t('submit.receipt.again');
     again.addEventListener('click', () => {
-      SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: SUBMIT.city, name: SUBMIT.name, result: null };
+      /* orgCustom/orgType 必须随状态回填,否则"再提交一次"会丢自定义组织名 */
+      SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: SUBMIT.city, name: SUBMIT.name, orgMode: SUBMIT.orgMode, org: SUBMIT.org, orgCustom: SUBMIT.orgCustom, orgType: SUBMIT.orgType, date: SUBMIT.date, result: null };
       renderStage();
     });
     const toQueue = document.createElement('button');
@@ -1331,6 +2161,21 @@ function buildSubmit(){
       ops.appendChild(toAgent);
     }
     body.appendChild(ops);
+
+    /* 验证足迹(端侧实测):延迟 × 设备功耗 × 电网因子 → 与核证减缓量的比值 */
+    if(r.verification && r.verification.elapsedMs && s.tco2e != null){
+      const C = PROOF.carbonFactors();
+      const ms = r.verification.elapsedMs;
+      const ug = ms / 3.6e6 * C.devicePowerW * C.gridFactor * 1e6; /* μg CO2e */
+      const ratio = ug > 0 ? Math.round(s.tco2e * 1e12 / ug) : 0;   /* tCO2e×1e6 g/t ÷ μg×1e-6 g/μg */
+      const fp = document.createElement('div');
+      fp.className = 'footprint';
+      fp.innerHTML =
+        '<div class="fp-line">⚡ ' + t('footprint.line', { ms: ms, g: fmtNum(ug, 1), w: C.devicePowerW, t: fmtNum(s.tco2e, 1) }) + '</div>' +
+        '<div class="fp-line fp-ratio">' + t('footprint.ratio', { n: fmtNum(ratio, 0) }) + '</div>';
+      body.appendChild(fp);
+    }
+
     const note = document.createElement('p');
     note.className = 'qc-hint';
     note.textContent = t('submit.result.note');
@@ -1367,7 +2212,7 @@ function buildSubmit(){
       top.appendChild(actTag(s.action));
       const meta = document.createElement('div');
       meta.className = 'feed-meta';
-      meta.textContent = s.submitter + ' · ' + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
+      meta.textContent = s.submitter + ' · ' + (s.org ? orgName(s.org) + ' · ' : '') + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
       info.appendChild(top); info.appendChild(meta);
       const view = document.createElement('button');
       view.className = 'btn btn-ghost';
@@ -1384,11 +2229,11 @@ function buildSubmit(){
   }
 
   /* 示例照片一键演示 */
+  window.__submitFile = async f => { setFile(f); setTimeout(doSubmit, 150); };
   window.__demoSubmit = async () => {
     if(!SUBMIT.action) SUBMIT.action = 'afforest';
     const f = await makeSamplePhoto(SUBMIT.action);
-    setFile(f);
-    setTimeout(doSubmit, 150);
+    window.__submitFile(f);
   };
 
   renderStage();
@@ -1403,16 +2248,239 @@ function switchTab(id){
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ============================================================
+   关于(About):真实计算清单 / 演示数据声明 / 素材归属 / 二维码
+   ============================================================ */
+const REPO_URL = 'https://github.com/gunnarcosmo1123-oss/proof-api-dashboard';
+const ATTRIBUTION = [
+  ['afforest-01', 'Volunteers enjoy planting trees', 'Hillebrand Steve, U.S. Fish and Wildlife Service', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Volunteers_enjoy_planting_trees.jpg'],
+  ['afforest-02', 'Volunteer Tree Planting 120802-F-OS776-021', 'Airman 1st Class Christopher Tam', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Volunteer_Tree_Planting_120802-F-OS776-021.jpg'],
+  ['solar-01', 'Rooftop solar panels in Caldicot', 'Jaggery', 'CC BY-SA 2.0', 'https://commons.wikimedia.org/wiki/File:Rooftop_solar_panels_in_Caldicot_-_geograph.org.uk_-_6388281.jpg'],
+  ['solar-02', 'Rooftop solar panels, Gwehelog', 'Jaggery', 'CC BY-SA 2.0', 'https://commons.wikimedia.org/wiki/File:Rooftop_solar_panels,_Gwehelog_-_geograph.org.uk_-_7018757.jpg'],
+  ['wetland-01', 'Wetland restoration in Australia', 'Nick carson', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Wetland_restoration_in_Australia.jpg'],
+  ['wetland-02', 'Wetland restoration, Wetlands Reserve Program, Texas', 'USDA NRCS Texas', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Wetland_restoration_under_the_Wetlands_Reserve_Program_in_Texas_(24743607259).jpg'],
+  ['ev-01', 'Car2Go Charging Station Stuttgart', 'Julian Herzog', 'CC BY 4.0', 'https://commons.wikimedia.org/wiki/File:Car2Go_Charging_Station_Stuttgart_2013_01.jpg'],
+  ['ev-02', 'PisaEnelXChargingStation', 'Daniele Napolitano', 'CC BY-SA 4.0', 'https://commons.wikimedia.org/wiki/File:PisaEnelXChargingStation.jpg'],
+  ['cleanup-01', 'Beaches cleanup volunteers', 'Olympic National Park', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Beaches_cleanup_volunteers_(16749394444).jpg'],
+  ['cleanup-02', 'Oregon beach cleanup, Ocean Blue Project volunteers', 'Ocean Blue Project, Inc.', 'CC BY-SA 4.0', 'https://commons.wikimedia.org/wiki/File:Oregon-beach-cleanup-ocean-blue-project-volunteers.jpg'],
+  ['retrofit-01', 'Installing Insulation Batts', 'Tracey Nicholls, CSIRO', 'CC BY 3.0', 'https://commons.wikimedia.org/wiki/File:CSIRO_ScienceImage_2175_Installing_Insulation_Batts.jpg'],
+  ['retrofit-02', 'Installing Insulation & Roof Paneling', 'Petty Officer 3rd Class Matthew Noles, U.S. Navy', 'Public domain', 'https://commons.wikimedia.org/wiki/File:Installing_Insulation_%26_Roof_Paneling_(8938297).jpg']
+];
+
+function buildAbout(){
+  const sec = $('#tab-about');
+  sec.innerHTML = '';
+
+  const hero = card(sec, t('about.title'), t('about.sub'));
+  hero.body.innerHTML = '<p class="about-lead">' + t('about.what.title') + '</p>' +
+    '<p class="muted-text" style="margin-top:6px">' + t('about.what.sub') + '</p>';
+
+  /* 真实计算清单(诚实重标:实测 / 启发式 / 演示规则) */
+  const real = card(sec, t('about.real.title'), null);
+  [
+    [t('about.real.sha'), 'about.tag.measured'],
+    [t('about.real.phash'), 'about.tag.measured'],
+    [t('about.real.noise'), 'about.tag.measured'],
+    [t('about.real.color'), 'about.tag.heuristic'],
+    [t('about.real.ela'), 'about.tag.measured'],
+    [t('about.real.exif'), 'about.tag.measured'],
+    [t('about.real.prov'), 'about.tag.measured'],
+    [t('about.real.geo'), 'about.tag.measured'],
+    [t('about.real.score'), 'about.tag.demo']
+  ].forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'about-row';
+    row.innerHTML = '<span>' + r[0] + '</span><i class="about-tag tag-' + r[1].split('.').pop() + '">' + t(r[1]) + '</i>';
+    real.body.appendChild(row);
+  });
+
+  /* 验证足迹(端侧) */
+  const fpc = card(sec, t('about.footprint.title'), null);
+  const fpt = document.createElement('p');
+  fpt.className = 'muted-text';
+  fpt.textContent = t('about.footprint.text');
+  fpc.body.appendChild(fpt);
+
+  /* 演示数据声明 + 隐私 */
+  const data = card(sec, t('about.data.title'), null);
+  const dp = document.createElement('p');
+  dp.className = 'muted-text';
+  dp.textContent = t('about.data.text');
+  data.body.appendChild(dp);
+  const priv = card(sec, t('about.privacy.title'), null);
+  const pp = document.createElement('p');
+  pp.className = 'muted-text';
+  pp.textContent = t('about.privacy.text');
+  priv.body.appendChild(pp);
+
+  /* 二维码 + 仓库链接 */
+  const grid = document.createElement('div');
+  grid.className = 'grid-2';
+  sec.appendChild(grid);
+  const qrCard = card(grid, t('about.qr'), null);
+  const qr = document.createElement('img');
+  qr.className = 'about-qr';
+  qr.src = 'assets/qr.png';
+  qr.alt = 'QR code';
+  qrCard.body.appendChild(qr);
+  const linkCard = card(grid, t('about.repo'), null);
+  const a = document.createElement('a');
+  a.className = 'about-link';
+  a.href = REPO_URL;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = REPO_URL;
+  linkCard.body.appendChild(a);
+
+  /* 照片素材归属清单 */
+  const ph = card(sec, t('about.photos.title'), null);
+  const pt = document.createElement('p');
+  pt.className = 'muted-text';
+  pt.textContent = t('about.photos.text');
+  ph.body.appendChild(pt);
+  const table = document.createElement('div');
+  table.className = 'about-attrib';
+  ATTRIBUTION.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'about-attrib-row';
+    row.innerHTML = '<span class="aa-file">' + r[0] + '</span><span class="aa-title">' + r[1] + '</span><span class="aa-artist">' + r[2] + '</span><span class="aa-license">' + r[3] + '</span>';
+    const lk = document.createElement('a');
+    lk.href = r[4];
+    lk.target = '_blank';
+    lk.rel = 'noopener';
+    lk.className = 'aa-link';
+    lk.textContent = '↗';
+    row.appendChild(lk);
+    table.appendChild(row);
+  });
+  ph.body.appendChild(table);
+}
+
+/* ============================================================
+   演示巡览(?tour=1):字幕驱动的自动叙事,零网络调用
+   上传 → 真实验证 → 裁切/滤镜变体重传 → DUP_PHASH 拦截 →
+   回执 → 智能体证据链 → 幻影积分金额(钱的那句必须自己到)
+   ============================================================ */
+const TOUR = { on: false, step: -1, paused: false, timer: null, poll: null, hold: null };
+
+function buildTour(){
+  const bar = document.createElement('div');
+  bar.id = 'tour-bar';
+  bar.style.display = 'none';
+  bar.innerHTML =
+    '<div class="tour-cap"><b id="tour-title"></b><span id="tour-caption"></span></div>' +
+    '<div class="tour-ctl">' +
+      '<button id="tour-pause" class="btn btn-ghost" type="button" title="' + t('tour.pause') + '">⏸</button>' +
+      '<button id="tour-step" class="btn btn-ghost" type="button" title="' + t('tour.step') + '">▶|</button>' +
+      '<button id="tour-skip" class="btn btn-ghost" type="button" title="' + t('tour.skip') + '">⏭</button>' +
+    '</div>';
+  document.body.appendChild(bar);
+  $('#tour-pause').addEventListener('click', () => {
+    TOUR.paused = !TOUR.paused;
+    $('#tour-pause').textContent = TOUR.paused ? '▶' : '⏸';
+    if(!TOUR.paused && TOUR.hold){ const h = TOUR.hold; TOUR.hold = null; h(); }
+  });
+  $('#tour-step').addEventListener('click', () => {
+    TOUR.paused = true;
+    $('#tour-pause').textContent = '▶';
+    runTourStep();
+  });
+  $('#tour-skip').addEventListener('click', endTour);
+}
+
+const TOUR_STEPS = [
+  { tab: 'submit', title: 'tour.s1.t', cap: 'tour.s1.c', wait: 4600 },
+  { title: 'tour.s2.t', cap: 'tour.s2.c', act: () => { if(window.__demoSubmit) window.__demoSubmit(); },
+    until: () => SUBMIT.stage === 3 && !!SUBMIT.result },
+  { title: 'tour.s3.t', cap: 'tour.s3.c',
+    vars: () => ({ ms: SUBMIT.result && SUBMIT.result.verification ? SUBMIT.result.verification.elapsedMs : '…', t: fmtNum(SUBMIT.result.submission.tco2e, 1) }),
+    wait: 5600 },
+  { title: 'tour.s4.t', cap: 'tour.s4.c', wait: 4600 },
+  { title: 'tour.s5.t', cap: 'tour.s5.c',
+    act: () => {
+      const f = SUBMIT.file;
+      if(f) makeVariantPhoto(f).then(v => { if(window.__submitFile) window.__submitFile(v); });
+    },
+    until: () => SUBMIT.stage === 3 && SUBMIT.result && SUBMIT.result.submission.dup && SUBMIT.result.submission.dup.type === 'perceptual' },
+  { title: 'tour.s6.t', cap: 'tour.s6.c',
+    vars: () => {
+      const d = SUBMIT.result.submission.dup;
+      return { hd: d.hd != null ? d.hd : '—', sim: Math.round(d.sim * 100) };
+    },
+    wait: 4600 },
+  { tab: 'dup', title: 'tour.s7.t', cap: 'tour.s7.c',
+    vars: () => {
+      const s = SUBMIT.result.submission;
+      return { t: fmtNum(s.tco2e, 1), eur: fmtNum(s.tco2e * PROOF.carbonFactors().priceEUR, 0) };
+    },
+    wait: 6200 },
+  { tab: 'agent', title: 'tour.s8.t', cap: 'tour.s8.c',
+    act: () => {
+      const s = SUBMIT.result && SUBMIT.result.submission;
+      if(s) setTimeout(() => { if(window.__agentAsk) window.__agentAsk(t('agent.investigating', { id: s.id })); }, 700);
+    },
+    wait: 7200 },
+  { title: 'tour.s9.t', cap: 'tour.s9.c', wait: 9000 }
+];
+
+function tourCaption(stp){
+  $('#tour-title').textContent = t(stp.title);
+  $('#tour-caption').textContent = t(stp.cap, stp.vars ? stp.vars() : undefined);
+}
+
+function endTour(){
+  TOUR.on = false;
+  clearTimeout(TOUR.timer);
+  clearInterval(TOUR.poll);
+  const bar = $('#tour-bar');
+  if(bar) bar.style.display = 'none';
+}
+
+function runTourStep(){
+  clearTimeout(TOUR.timer);
+  clearInterval(TOUR.poll);
+  TOUR.step++;
+  if(TOUR.step >= TOUR_STEPS.length){ endTour(); return; }
+  const stp = TOUR_STEPS[TOUR.step];
+  if(stp.tab) switchTab(stp.tab, true);
+  tourCaption(stp);
+  if(stp.act) stp.act();
+  if(stp.until){
+    TOUR.poll = setInterval(() => {
+      if(TOUR.paused) return;
+      if(stp.until()){
+        clearInterval(TOUR.poll);
+        runTourStep();
+      }
+    }, 400);
+  } else {
+    TOUR.timer = setTimeout(() => {
+      if(TOUR.paused){ TOUR.hold = runTourStep; return; }
+      runTourStep();
+    }, stp.wait || 3000);
+  }
+}
+
+function startTour(){
+  const bar = $('#tour-bar');
+  if(!bar) return;
+  bar.style.display = 'flex';
+  TOUR.on = true; TOUR.step = -1; TOUR.paused = false;
+  runTourStep();
+}
+
 function applyStaticLabels(){
   document.title = LANG === 'zh' ? 'Proof API · 气候行动验证看板 — Team P05 高保真原型' : 'Proof API · Climate Action Verification Dashboard — Team P05 prototype';
   $('#top-ai').innerHTML = '<i class="pulse"></i>' + t('top.ai');
   $('#top-ver').textContent = t('top.ver');
-  $('#lang-toggle').textContent = LANG === 'zh' ? 'EN' : '中文';
+  const lg = $('#lang-toggle');
+  if(lg) lg.querySelectorAll('[data-l]').forEach(sp => sp.classList.toggle('active', sp.dataset.l === LANG));
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
   $$('.tabs button').forEach(b => b.textContent = t('nav.' + b.dataset.tab));
   $$('.tabs button').forEach(b => {
     const dot = document.createElement('i');
     dot.className = 'tab-dot';
-    dot.style.background = { submit: '#199e70', overview: '#2a78d6', queue: '#eb6834', dup: '#ec835a', analytics: '#1baf7a', agent: '#6250d6' }[b.dataset.tab];
+    dot.style.background = { submit: '#199e70', overview: '#2a78d6', queue: '#eb6834', dup: '#ec835a', analytics: '#1baf7a', map: '#0e9aa7', agent: '#6250d6', about: '#8e44ad' }[b.dataset.tab];
     b.prepend(dot);
   });
   $('#footer-1').textContent = t('footer.1');
@@ -1431,7 +2499,9 @@ function buildAll(){
   buildQueue();
   buildDup();
   buildAnalytics();
+  buildMap();
   buildAgent();
+  buildAbout();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1449,6 +2519,7 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreSession(); /* 会话提交并入数据集(队列/KPI 联动) */
   applyStaticLabels();
   buildAll();
+  buildTour();
 
   $$('.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('#lang-toggle').addEventListener('click', () => {
@@ -1477,7 +2548,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const qp = new URLSearchParams(location.search);
     const tab = qp.get('tab');
     if(tab && document.getElementById('tab-' + tab)) switchTab(tab, true);
-    if(qp.get('nosplash')){ clearInterval(timer); intro.classList.add('done'); }
+    if(qp.get('nosplash') || window.__skipIntro){ clearInterval(timer); intro.classList.add('done'); }
+    if(qp.get('tour')){
+      switchTab('submit', true);
+      setTimeout(() => startTour(), 700);
+    }
     const did = qp.get('drawer');
     if(did) setTimeout(() => openDrawer(did), 300);
     const sid = qp.get('agent');
@@ -1489,6 +2564,17 @@ document.addEventListener('DOMContentLoaded', () => {
       switchTab('submit', true);
       setTimeout(() => window.__demoSubmit && window.__demoSubmit(), 400);
       if(qp.get('demo-submit') === '2') setTimeout(() => window.__demoSubmit && window.__demoSubmit(), 7000);
+    }
+    /* ?map-country=Malaysia[&map-date=2026-11-10] 预选行动地图国家/日期(调试/截图用) */
+    const mc = qp.get('map-country');
+    const md = qp.get('map-date');
+    if(mc || md){
+      switchTab('map', true);
+      setTimeout(() => {
+        if(mc) MAP_STATE = { country: mc, city: null, date: md || null };
+        else MAP_STATE.date = md;
+        if(window.__renderMap) window.__renderMap();
+      }, 350);
     }
   } catch(e) {}
 });
