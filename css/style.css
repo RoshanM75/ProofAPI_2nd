@@ -1012,3 +1012,54 @@ footer{
   #tour-bar{ flex-direction:column; align-items:stretch; gap:10px; bottom:10px; }
   .tour-ctl{ justify-content:flex-end; }
 }
+
+/* Opt-in local model and longitudinal evidence; no external UI dependencies. */
+.evidence-panel{ margin-top:18px; padding:22px; }
+.evidence-panel h3{ margin:0 0 10px; font-size:17px; }
+.evidence-panel h4{ margin:0 0 12px; font-size:14px; }
+.evidence-note{ color:var(--text-secondary); font-size:12px; line-height:1.7; margin:10px 0; max-width:100ch; }
+.evidence-provenance{ color:var(--text-muted); font-size:11px; overflow-wrap:anywhere; line-height:1.7; }
+.evidence-badges{ display:flex; gap:8px; flex-wrap:wrap; margin:14px 0; }
+.evidence-badges span{ background:#eef8f3; border:1px solid #cfe9db; border-radius:6px; padding:5px 9px; color:#246348; font-size:11px; }
+.evidence-controls{ display:flex; gap:10px; flex-wrap:wrap; margin:16px 0 8px; }
+#run-real-model{ background:#edf5ff; border-color:#b8d4f8; color:#185d9f; }
+.evidence-panel [hidden]{ display:none!important; }
+.evidence-panel button:disabled{ opacity:.6; cursor:wait; }
+.evidence-status{ font-size:12px; line-height:1.6; color:var(--text-secondary); overflow-wrap:anywhere; }
+.evidence-failure{ background:#fff6e7; border-left:3px solid #c18b1e; padding:10px 12px; color:#735019; }
+.evidence-metrics{ display:flex; flex-wrap:wrap; gap:16px 36px; padding:16px 0; margin-top:8px; border-top:1px solid var(--border); }
+.evidence-metric span{ display:block; font-size:11px; color:var(--text-muted); margin-bottom:5px; }
+.evidence-metric b{ font-size:23px; font-variant-numeric:tabular-nums; color:var(--text-primary); }
+.evidence-select{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; margin:14px 0; }
+.evidence-select .txt-in{ max-width:100%; }
+.model-probabilities{ padding-left:24px; max-width:720px; }
+.model-probabilities li{ padding:8px 0; font-size:12px; }
+.model-probabilities .is-claimed{ color:#185d9f; }
+.probability-label{ display:flex; justify-content:space-between; gap:16px; line-height:1.6; }
+.probability-label b{ font-variant-numeric:tabular-nums; white-space:nowrap; }
+.model-probabilities meter{ display:block; width:100%; height:13px; accent-color:#2a78d6; }
+.evidence-integrity{ font-size:19px; line-height:1.5; font-weight:600; color:#216348; margin:14px 0; padding:13px 16px; border-left:3px solid #16805c; background:#f1f8f4; }
+.pair-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin:20px 0; }
+.pair-cell{ border:1px solid var(--border); border-radius:10px; padding:14px; min-width:0; }
+.pair-preview{ height:220px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); border:1px dashed #ccd8d1; border-radius:6px; overflow:hidden; margin-bottom:12px; color:var(--text-muted); font-size:12px; }
+.pair-preview img{ width:100%; height:100%; object-fit:contain; }
+.pair-date{ display:flex; flex-direction:column; gap:7px; margin-top:14px; color:var(--text-muted); font-size:11px; }
+.pair-date input{ width:100%; }
+.pair-confirm{ display:flex; gap:9px; align-items:flex-start; font-size:12px; line-height:1.5; margin:14px 0; }
+.pair-confirm input{ margin-top:3px; flex-shrink:0; accent-color:#16805c; }
+.evidence-chart{ display:block; width:100%; max-width:800px; height:auto; margin:12px 0; }
+.satellite-panel{ border-top:1px solid var(--border); padding-top:22px; margin-top:24px; }
+.evidence-table-wrap{ overflow:auto; margin:12px 0; }
+.evidence-table{ border-collapse:collapse; width:100%; font-size:11px; text-align:left; white-space:nowrap; }
+.evidence-table th,.evidence-table td{ padding:9px 12px; border-bottom:1px solid var(--border); }
+.evidence-table th{ color:var(--text-muted); font-weight:500; }
+.ndvi-details summary{ cursor:pointer; color:#185d9f; font-size:12px; padding:8px 0; }
+.evidence-panel a{ color:#185d9f; }
+@media(max-width:640px){
+  .evidence-panel{ padding:16px; }
+  .pair-grid{ grid-template-columns:1fr; }
+  .pair-preview{ height:190px; }
+  .evidence-integrity{ font-size:16px; }
+  .evidence-controls .btn{ flex:1 1 180px; }
+  .probability-label{ flex-wrap:wrap; gap:2px; }
+}

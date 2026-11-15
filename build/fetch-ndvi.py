@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Refresh the bundled, real Landsat reference series. Python stdlib only.
+
+Source: USGS Landsat 8/9 Collection 2 Level-2 via Planetary Computer STAC
+and its public point-sampling API. No API key. This is a 30 m pixel sample,
+not a project impact estimate. Run from any directory; inspect the JSON diff.
+"""
+import concurrent.futures
+import datetime
+import json
+import pathlib
+import urllib.parse
+import urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+BASE = 'https://planetarycomputer.microsoft.com/api'
+SITES = [
+    dict(id='karura', name='Karura Forest · Nairobi', city=6, lon=36.835, lat=-1.234),
+    dict(id='xixi', name='Xixi Wetland · Hangzhou', city=3, lon=120.061, lat=30.266),
+]
+
+
+def get(url):
+    with urllib.request.urlopen(url, timeout=60) as response:
+        return json.load(response)
+
+
+def sample(item, site):
+    query = urllib.parse.urlencode([
+        ('collection', 'landsat-c2-l2'), ('item', item['id']),
+        ('assets', 'red'), ('assets', 'nir08'), ('assets', 'qa_pixel'),
+        ('assets', 'qa_radsat'),
+    ])
+    url = f"{BASE}/data/v1/item/point/{site['lon']},{site['lat']}?{query}"
+    try:
+        values = get(url)['values']
+        if any(v is None for v in values):
+            return None
+        red_dn, nir_dn, qa, saturated = values
+        # QA_PIXEL bits 0..5: fill, dilated cloud, cirrus, cloud, shadow, snow.
+        if int(qa) & 0b111111 or int(saturated):
+            return None
+        red, nir = red_dn * 0.0000275 - 0.2, nir_dn * 0.0000275 - 0.2
+        if min(red, nir) < 0 or red + nir <= 0:
+            return None
+        return dict(date=item['properties']['datetime'][:10],
+                    acquiredAt=item['properties']['datetime'],
+                    ndvi=round((nir - red) / (nir + red), 5),
+                    redDN=red_dn, nirDN=nir_dn, qaPixel=int(qa), qaRadsat=int(saturated),
+                    sceneId=item['id'], platform=item['properties']['platform'],
+                    sceneCloudPercent=item['properties']['eo:cloud_cover'],
+                    sourceUrl=next(x['href'] for x in item['links'] if x['rel'] == 'self'),
+                    sampleUrl=url)
+    except Exception as exc:
+        print(f"Skipped {item['id']}: {exc}", flush=True)
+        return None
+
+
+def main():
+    sites = []
+    for site in SITES:
+        lon, lat = site['lon'], site['lat']
+        query = urllib.parse.urlencode(dict(collections='landsat-c2-l2',
+            bbox=f'{lon-.001},{lat-.001},{lon+.001},{lat+.001}',
+            datetime='2024-01-01T00:00:00Z/2024-12-31T23:59:59Z', limit=100))
+        items = get(f'{BASE}/stac/v1/search?{query}')['features']
+        candidates = [i for i in items if i['properties']['eo:cloud_cover'] < 40
+                      and i['id'].endswith('T1')]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            samples = list(pool.map(lambda i: sample(i, site), candidates))
+        samples = sorted([s for s in samples if s], key=lambda s: s['date'])
+        # Keep at most one clear acquisition per month; no interpolation/imputation.
+        monthly = {}
+        for s in samples:
+            monthly.setdefault(s['date'][:7], s)
+        observations = list(monthly.values())
+        if len(observations) < 4:
+            raise RuntimeError(f"Too few clear observations for {site['id']}")
+        sites.append(dict(site, observations=observations, searchedScenes=len(items),
+                          clearSamples=len(samples)))
+        print(site['name'], len(observations), 'observations', flush=True)
+    data = dict(schemaVersion=1, fetchedAt=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        source='USGS Landsat 8/9 Collection 2 Level-2 surface reflectance',
+        doi='https://doi.org/10.5066/P9OGBGM6',
+        provider='Microsoft Planetary Computer STAC + point-sampling API',
+        collection='landsat-c2-l2', resolutionMeters=30,
+        method='NDVI = (NIR - red) / (NIR + red); SR_B5 / SR_B4; reflectance = DN × 0.0000275 − 0.2. Tier 1 scenes, scene cloud <40%; reject QA_PIXEL bits 0–5 and any QA_RADSAT flag. First clear observation per month; gaps are not filled.',
+        uncertainty='No numeric confidence interval is available for this single 30 m pixel. Residual cloud, atmospheric correction, seasonal phenology, mixed pixels and geolocation affect NDVI. NDVI is a greenness proxy, not canopy percentage, carbon sequestration or causal project impact.',
+        scope='Real reference-site observations for this demo; these sites are not linked to submitted photos or verified interventions.',
+        sites=sites)
+    target = ROOT / 'assets/data/landsat-ndvi.json'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+    # Classic-script copy supports double-click file:// without fetch or a server.
+    (ROOT / 'js/ndvi-data.js').write_text('// Generated by build/fetch-ndvi.py; canonical source: assets/data/landsat-ndvi.json\nwindow.PROOF_NDVI = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n')
+
+
+if __name__ == '__main__':
+    main()

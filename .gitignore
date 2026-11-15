@@ -5,3 +5,6 @@ desktop.ini
 
 # 内部文档：文件自身标注「提交仓库前请删除或加入 .gitignore」
 COP31-SUGGESTIONS.md
+
+work/
+__pycache__/

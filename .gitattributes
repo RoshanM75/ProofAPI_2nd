@@ -1,0 +1,2 @@
+# Preserve upstream notices byte-for-byte (manifest.json records their SHA-256).
+assets/vendor/transformers/ThirdPartyNotices-onnxruntime.txt -whitespace

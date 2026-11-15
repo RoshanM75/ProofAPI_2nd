@@ -1937,6 +1937,7 @@ function buildSubmit(){
       if(promiseDone && stagesDone.every(Boolean)){
         timers.forEach(clearTimeout);
         SUBMIT.result = result;
+        ProofEvidence.remember(result.submission.id, payload.file);
         SUBMIT.stage = 3;
         renderStage();
         if(window.__refreshOverview) window.__refreshOverview();
@@ -2001,6 +2002,8 @@ function buildSubmit(){
     }
     grid.appendChild(flagP);
     body.appendChild(grid);
+
+    ProofEvidence.render(body, r);
 
     /* 取证面板:ELA 热力图 + EXIF + 溯源凭证(全部本地实测) */
     if(s.forensics){

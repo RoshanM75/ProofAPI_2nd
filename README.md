@@ -20,7 +20,47 @@
 - Language: top-right toggle. Default follows your **browser language** (three-level fallback: `?lang=` → localStorage → `navigator.language`); force it with `index.html?lang=en`.
 - Mobile: the repo ships a PWA manifest + icons — open the URL and "Add to Home Screen".
 - Data self-check: `node build/test-data.js` (validates all dataset invariants); QR generator self-check: `node build/verify-qr.js`.
+- New evidence checks: `node build/test-evidence.js` (SSIM, green pixels, Landsat QA/provenance and raw-value NDVI calculations).
 - Debug URLs: `?tab=map` jumps to the action map, `?map-country=Malaysia` preselects a country, `?map-date=2026-11-10` preselects a replay date, `?drawer=PA-1082` opens a submission detail, `?agent=PA-1082` auto-runs an agent investigation, `?demo-submit=1` runs one scripted photo submission end-to-end, `?demo-submit=2` submits the same photo twice (second one gets flagged as an exact-hash duplicate), **`?tour=1` auto-plays the 90-second narrated story** (upload → real verification → cropped/filtered resubmission → DUP_PHASH interception → the carbon price tag → agent evidence chain; pause / step / skip controls, zero network calls), `?offline=1` shows the static offline first screen.
+
+## Optional real model and paired evidence
+
+Submit a photo, then click **🧠 Run real model** in the result panel. This is an opt-in second opinion; the default submission engine remains zero-dependency, local, and offline, including when double-clicking `index.html`. No model script, WASM, worker, or weights are requested before opt-in.
+
+For the real model, serve the directory on **localhost or HTTPS** (for example `python -m http.server 8000`, then open `http://localhost:8000/?lang=en&tab=submit`). A first run needs a network connection to Hugging Face to download approximately 150 MB of pinned CLIP weights. Browser workers and the Cache API are required. `file://` continues to support heuristics and paired evidence; the model button explains why caching cannot run there.
+
+- **Real local inference:** Transformers.js **2.17.2**, ONNX Runtime Web **1.14.0**, quantized `Xenova/clip-vit-base-patch32` at revision `6b7c523703ae26e39be4b03774966f8571c7f523`. CPU/WASM runs in a worker. The runtime and WASM are bundled locally and loaded on demand. The image is passed to that worker in memory; it is never sent to a server.
+- **Natural-language candidates:** “a rooftop covered with solar panels”, “volunteers collecting trash on a beach”, “newly planted tree seedlings”, and matching wetland, EV-charging and insulation prompts. The exact strings appear in the result. Top 3 / top 6 show the actual candidate-relative softmax probabilities, with the claimed action’s probability shown separately. These are **not calibrated authenticity or action-occurrence confidence**.
+- **Measured timing:** inference includes CLIP preprocessing/forward pass/postprocessing, measured with `performance.now()`; model loading and initialization are reported separately. The initial run can include WASM compilation overhead. No scores or timing values are fabricated. CLIP never changes the heuristic verdict, duplicate flags, or approval status.
+- **Offline proof:** the model files use a versioned Cache API cache. Opt-in also installs a scoped service worker that caches the app shell, local runtime, WASM and demo photos. **Verify cache-only rerun** starts a fresh worker, disallows remote model access and requires WASM fetches to hit cache. To demonstrate a real offline session: complete the first run, disconnect, reload the page, resubmit or reattach the same original, and run again. Original images stay in memory only; existing 240 px session thumbnails keep their established localStorage behavior. Browser storage can be evicted or cleared, so a fresh browser/origin can require a new download.
+- **Visible fallback:** unsupported contexts/APIs, missing/evicted cache, network/load failures, decode/inference failures, storage-quota errors, cancellation, and a five-minute timeout leave the heuristic result available with a visible reason. A failed model run cannot auto-approve evidence.
+- **Positioning:** local processing avoids image uploads and server inference. Cached weights avoid repeated downloads. We do **not** claim measured energy savings: the first download and inference consume energy, and device/grid conditions matter. CLIP is a semantic cross-check alongside hashes/EXIF/provenance; it is **not an AI-generated-image detector**.
+
+The paired-evidence panel uses the submitted original as “after” and accepts a baseline “before” image, self-reported acquisition dates and a same-viewpoint/framing confirmation. It measures windowed grayscale **SSIM** (a structural match heuristic, not a viewpoint probability) and the change in **RGB green-pixel share**. The two-point curve connects observations only; it does not invent intermediate growth. Aspect-ratio differences above 8% are rejected; no registration is performed. Identical files trigger a visible warning. Neither measurement establishes identity, canopy cover or ecological benefit.
+
+The panel states plainly: **“a single photo proves an action happened, not that it worked”**. This describes the scope of an action record; a photo alone cannot authenticate the event.
+
+### Bundled real Landsat observations
+
+`assets/data/landsat-ndvi.json` contains **15 real 2024 acquisitions at two reference sites**: Karura Forest, Nairobi (8) and Xixi Wetland, Hangzhou (7). These are reference project locations, **not verified interventions or locations linked to an uploaded photo**. The UI labels the source, fetched date, coordinates, 30 m resolution, acquisition timestamps, scene IDs and uncertainty. An expandable table links every observation to its STAC record; the downloadable JSON includes red/NIR raw values, QA flags and exact point-sampling URLs.
+
+Source: [USGS Landsat 8–9 Collection 2 Level-2](https://doi.org/10.5066/P9OGBGM6), public-domain USGS observations delivered by Microsoft Planetary Computer. NDVI uses SR_B5 and SR_B4 after applying `reflectance = DN × 0.0000275 − 0.2`. Tier 1 / scene cloud <40%; reject QA_PIXEL fill, dilated-cloud, cirrus, cloud, shadow and snow bits and all QA_RADSAT flags. Keep the first clear sample per month; omit gaps. There is **no numeric confidence interval** for these single-pixel samples. Residual cloud, atmospheric correction, mixed pixels, geolocation and seasonal phenology affect NDVI. Greenness is not canopy percentage, carbon sequestration, additionality, permanence or causal impact.
+
+Refresh intentionally with `python build/fetch-ndvi.py` (Python standard library; network needed only for this build-time operation). It writes the canonical JSON and an identical classic-script copy, `js/ndvi-data.js`, so the entire series is also available under `file://` without fetching JSON. The app makes no satellite requests. Review the data diff after refreshing.
+
+New files: `js/evidence.js` (panels and pixel comparison), `js/model-worker.js` (lazy inference), `js/model-config.js` (pinned revision/prompts), `sw.js` (opt-in offline assets), and `assets/vendor/transformers/` (pinned runtime/WASM, licenses and third-party notices). When changing cached shell assets in a future release, bump `SHELL_CACHE` in `sw.js`.
+
+### Browser verification
+
+The app has no package-manager or build requirement. Optional automated browser checks use Playwright as a **test-only** tool. With the local server running:
+
+```sh
+npm install --prefix work/test-tools --cache work/npm-cache playwright@1.65.1
+NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-evidence-browser.js
+MODEL_TEST=1 NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-evidence-browser.js
+```
+
+Set `CHROMIUM_PATH` for your installed Chromium if needed. The first command checks the default path, paired evidence, source labels, model-load fallback, Chinese mobile layout and `file://` (reports a skip if browser policy blocks local-file navigation). `MODEL_TEST=1` additionally runs genuine CLIP inference, checks all six probabilities sum to one, performs a fresh-worker cache-only run, reloads the app offline, checks original-image reattachment by SHA, and tests fallback after evicting weights. The real-model test downloads ~150 MB and intentionally removes its cached weights at the end. Use `PROOF_TEST_PROFILE` only with a disposable test profile. In a managed network, `PROOF_TEST_MIRROR` can point to a test-only streaming mirror that verifies upstream TLS; it is never an application setting.
 
 ## One clear flow — submit → result → flags → receipt
 
@@ -88,7 +128,7 @@ Every score source is labelled in the UI (result page, drawer, About tab):
 - Every submission carries an estimated **tCO2e** from a public factor table — IPCC 2019 Refinement (afforestation), IPCC 2013 Wetlands Supplement, MEE China 2023 grid factor × unit sizes (solar / retrofit), IEA passenger-car intensity (EV); cleanup is a high-uncertainty indirect estimate. The full table with sources and years lives in the **Analytics** tab.
 - Overview shows **verified mitigation delivered (tCO2e)**; every intercepted duplicate group shows **what it would have paid out** (≈ tCO2e × the EU ETS reference price of €80/t).
 - Every figure is labelled **"reference estimate · not issued credits"** — the prototype estimates scale; it does not mint credits.
-- **Verification footprint**: latency is measured per submission and shown on the receipt; gCO2e = measured ms × a 7 W device-power assumption × the grid factor. The footprint ratio against certified mitigation lands around **1 : 10⁸–10⁹ on-device** — cloud GPU inference would worsen it by 2–3 orders of magnitude. Everything runs locally; no data centre, no upload.
+- **Verification footprint**: default heuristic latency is measured per submission; the displayed energy figure is an estimate from duration × assumed 7 W × grid factor. It excludes optional CLIP and initial downloads. CLIP reports separate measured inference/load times. Neither photos nor NDVI certify mitigation, and no measured carbon saving or cloud-comparison ratio is claimed.
 - **Calibration**: the Analytics tab bins composite scores (85–89 / 90–94 / 95–100) against auto-approvals with a demo human-agreement reference line — and states plainly that real calibration requires real review logs.
 
 ## Duplicate detection (3 channels, as shown in the demo)
@@ -180,7 +220,7 @@ Source pages are linked in `build/photos-manifest.json`. Uploaded user photos (s
 
 ## Deliberately out of scope
 
-Real backend / API, authentication & reviewer roles, real photo upload (SVG stand-ins), real LLM behind the agent, persistence (state resets on reload).
+Real backend / API, authentication & reviewer roles, a real LLM behind the rules agent, calibrated authenticity detection, and causal project-impact certification. User photos are processed locally; session thumbnails persist locally. CLIP is an optional real classifier, not an authenticity detector.
 
 ## Roadmap
 
