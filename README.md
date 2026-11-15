@@ -76,9 +76,27 @@ The map remains zero-dependency and uses the bundled Natural Earth geometry, wit
 
 Checks: `node build/test-map-explorer.js` for scopes, coverage denominators and live aggregation; `NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-map-browser.js` with the server running for global/date filtering, highlights, search, zoom/pan, Analytics handoff, recommendations, live updates, Chinese mobile layout and offline reload.
 
+## Community experience: discover, plan, document and review
+
+The default **Home** page leads with a credited, bundled community-action photograph and three entry points: **Explore actions**, **Submit evidence** and **Review evidence**. Operational KPIs remain in Overview. Seed records are labelled as simulated, and Commons photographs as illustrative; they are not claimed to depict the demo project locations.
+
+The Action Map adds **Map + gallery / Gallery / Table** modes with the same country, city, action-date and action-type scope. Cards show the action, community/submitter, date and evidence stage; hovering or focusing a card highlights its city and country, while map markers highlight matching cards. Clickable action-type bars filter map highlights, ranking, records and direct analytics. **Open in Analytics** carries that action filter into the hierarchy as well. Coverage intentionally uses **all action types** for the selected location/date, with an explicit note, so filtering the results to cleanup cannot fabricate gaps in the other activity types.
+
+Each coverage card has **Explore this activity**, opening a three-step local project starter: suitability/permissions, project plan, and evidence/follow-up preparation. It collects a project name, community, recorded city, planned date, optional resources/plan and explicit browser-storage consent. Saving creates a project draft and prefills the Submit tab with its action, city, date and explicit project link. Permissions remain **to check**; planning checkboxes do not create baseline evidence or imply permits were granted.
+
+**Evidence guides** contains six bilingual Proof API field guides, version **1.0** (2026-11-15): cleanup, afforestation, solar, wetland restoration, EV charging and retrofit. Each describes suitable conditions, permissions/safeguards, resources, baseline records, action evidence and suggested follow-up. Verra and Climate Action Reserve links are reference frameworks; the guides are our own planning checklists, not approved certification methodologies. The Submit tab also offers optional structured, **self-reported** details (for example species/count/maintenance, solar kWp/installer/meter reference, or cleanup mass/disposal). Numeric details are validated, stored with the guide version and shown in the story; they never feed synthetic model confidence or certify outcomes.
+
+**Project stories** open from gallery cards, table entries, the evidence drawer or submit results. A story includes the community/site, evidence photo and attribution, dated action/review/observation timeline, missing-baseline/follow-up states and the relevant field guide. Explicitly linked repeat submissions appear in one project; nearby records and duplicate photos are never automatically grouped. Seed and standalone records have a single-record story without invented baseline, follow-up or review events. A local project can accept dated baseline/follow-up notes, optional non-negative observations and optional reduced image previews (input limit 12 MB, preview up to 800 px). Dates are self-reported; baselines must precede the action, and follow-ups must follow the latest action. Earlier follow-ups do not count as outcome observations for a later action record.
+
+**Review stages** distinguish automated checks, a recorded human review and outcome-observation availability. The prototype decision formerly labelled “Verified” is now **Accepted**; it is not third-party certification. Accept/reject controls open a review form requiring a self-declared reviewer name, a written reason and an acknowledgement of evidence limitations. Review events are timestamped, retain the original automated disposition and persist across reloads, including decisions on seeded records. “Human reviewed · local” does not imply authenticated identity, independent accreditation or issued credits. Follow-up availability indicates a self-reported record, not proven ecological benefit.
+
+Projects, observation previews and review logs use the versioned `proof-community-v1` browser-storage entry; existing submissions/thumbnails remain in `proof-session`. No accounts, backend, image upload or external service is introduced. Saving fails visibly and atomically if project/review storage is unavailable or full; unreadable project storage is retained instead of silently overwritten. Original observation-photo bytes are not retained. Project-story URLs (`?tab=story&story=PR-…`) reopen local records on the same browser; another device needs its own records and shows an explicit unavailable state. A demo/standalone story uses `story=record:PA-…`.
+
+The new scripts and stylesheet are included in optional offline shell **v3**, retaining the existing model cache and prior-shell fallback. Checks: `node build/test-community.js`, plus `NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-community-browser.js` with the local server running. Browser coverage includes the complete project → linked submission → baseline/follow-up → reasoned review → reload/offline workflow, gallery/table filter parity, linked highlights, source/version labels and Chinese mobile layouts.
+
 ## One clear flow — submit → result → flags → receipt
 
-The first tab (**提交验证 / Submit**) is the end-to-end flow Sadaf asked for:
+The **提交验证 / Submit** tab provides the end-to-end evidence flow:
 
 1. **Upload & claim** — drag-and-drop or file picker, live preview with file info (size / dimensions / type), claimed action type, location, optional submitter name, **submit-as toggle (individual / organisation) with an organisation picker** (choosing an org auto-fills its city; an **"Other"** option accepts a free-text org name → `org: 'custom:<name>'`, which becomes an *unregistered-organisation risk signal*), and an **action date** field (used by the action map's date replay). A **⚡ sample-photo button** generates a synthetic photo so the flow can be demoed with one click.
 2. **AI verification** — animated pipeline: ingest & fingerprint → 3-model verification → duplicate detection → receipt. **Real client-side computation**: SHA-256 of the file, **pHash-DCT 64-bit perceptual fingerprint** (32×32 grayscale → hand-written 2-D DCT → low-freq 8×8 minus DC → median threshold), Laplacian noise variance (authenticity heuristic), HSV color-profile cosine similarity (action-match **color-prior heuristic**, labelled as such), **ELA error-level analysis** (JPEG q90 re-encode → per-pixel diff heatmap + high-error share), **hand-written JPEG APP1/TIFF EXIF parsing** (GPS, Make/Model, Software, DateTimeOriginal), and a **C2PA/XMP provenance scan** of the file bytes. Geolocation is a **haversine distance from EXIF GPS to the claimed city** when GPS exists; otherwise a clearly-labelled demo-derived score.
@@ -97,10 +115,13 @@ Mobile submission → Ingestion → 3-model verification → Duplicate detection
 
 The dashboard covers the four review dimensions from our brief — **photo submissions, verification scores, duplicate flags, results** — plus the evidence-check agent slot, and the v0.2 planning layer: **hierarchy analytics (org → city → country → global)**, a **global action map** with per-country project lists and date replay, and **action coverage gap analysis**.
 
-## Information architecture (8 modules)
+## Information architecture
 
 | Module | Purpose | Key interactions |
 |---|---|---|
+| **Home** | Community entry point | Credited photo, explore/submit/review actions, illustrative action gallery and local project drafts |
+| **Evidence guides** | Action-specific planning and documentation | Six versioned bilingual field guides, applicability/source notes and a project-starter wizard |
+| **Project story** | Follow an explicit project or standalone record | Evidence timeline, repeat submissions, baseline/follow-up observations, source attribution and local human-review history |
 | **Submit** | The end-to-end flow | Upload → animated verification → verdict + flags → forensics panel (ELA heatmap / EXIF / C2PA) → printable receipt; individual/organisation toggle + org picker with an **"Other — free-text name"** option; action date; one-click sample-photo demo; session submission history |
 | **Overview** | Pipeline health & 14-day window | 5 KPIs, stacked daily volume by outcome, score histogram, action-type ranking (grouped by category), live feeds with org labels |
 | **Review queue** | Core review workflow | Status/action filters, photo cards with composite ring + 3 sub-score bars and org chips, detail drawer, approve / reject (updates KPIs live), one-click dispatch to the agent |
@@ -254,6 +275,10 @@ proof-api-dashboard/
                        from Natural Earth 50m, public domain; offline, no fetch)
   js/map-explorer.js   interactive map, shared location/date filters, analytics,
                        global/local action lists and coverage opportunities
+  js/community-data.js versioned field guides, local project/observation records,
+                       independent review stages and persistent review history
+  js/experience.js     Home, galleries, project starters/stories, guide/review UI
+  css/experience.css   community views, responsive galleries/dialogs/story pages
   js/photos.js         deterministic SVG photo-scene generator
   js/i18n.js           zh/en dictionary, t()/lb()
   js/charts.js         zero-dep SVG chart engine (light ink, validated ramps)

@@ -448,6 +448,8 @@ function registerIntoDataset(result){
 async function proofApiSubmit(payload){
   /* payload: { file: File, action, city, submitter, org|null, date:'YYYY-MM-DD'|null } */
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  const projectId = payload.projectId ? ProofCommunity.validateLink(payload.projectId, payload.action, payload.city, payload.date || PROOF.actionDate({time:new Date()})) : null;
+  const actionEvidence = typeof ProofCommunity !== 'undefined' ? ProofCommunity.normaliseEvidence(payload.action, payload.actionEvidence || {}) : {};
   const file = payload.file;
   const buf = await file.arrayBuffer();
   const url = URL.createObjectURL(file);
@@ -556,6 +558,9 @@ async function proofApiSubmit(payload){
     org: payload.org || null,
     orgType: payload.orgType || null, /* 仅 'custom:<名称>' 组织携带(ngo/company/community/personal) */
     tco2e: (PROOF.carbon(payload.action) || { t: 0 }).t, /* 碳参考估算(公开因子,非已发放积分) */
+    projectId,
+    guideVersion: typeof ProofCommunity !== 'undefined' ? ProofCommunity.guides[payload.action].version : null,
+    actionEvidence,
     action: payload.action,
     city: payload.city,
     time,
