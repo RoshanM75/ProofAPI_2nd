@@ -475,9 +475,9 @@ const PROOF = {
     };
   },
 
-  countryRows(){
+  countryRows(submissions = this.submissions){
     const map = {};
-    this.submissions.forEach(s => {
+    submissions.forEach(s => {
       const c = this.city(s.city);
       const k = c.country.en;
       (map[k] = map[k] || { key: k, name: c.country, list: [] }).list.push(s);
@@ -486,9 +486,9 @@ const PROOF = {
       .sort((a, b) => b.count - a.count);
   },
 
-  cityRows(countryEn){
+  cityRows(countryEn, submissions = this.submissions){
     const map = {};
-    this.submissions.filter(s => this.city(s.city).country.en === countryEn).forEach(s => {
+    submissions.filter(s => this.city(s.city).country.en === countryEn).forEach(s => {
       const c = this.city(s.city);
       (map[s.city] = map[s.city] || { key: s.city, name: { zh: c.zh, en: c.en }, list: [] }).list.push(s);
     });
@@ -496,9 +496,9 @@ const PROOF = {
       .sort((a, b) => b.count - a.count);
   },
 
-  orgRows(cityIdx){
+  orgRows(cityIdx, submissions = this.submissions){
     const map = {};
-    this.submissions.filter(s => s.city === cityIdx).forEach(s => {
+    submissions.filter(s => s.city === cityIdx).forEach(s => {
       const k = s.org || 'individual';
       const o = s.org ? this.org(s.org) : null;
       (map[k] = map[k] || {
@@ -510,9 +510,10 @@ const PROOF = {
   },
 
   /* 按 国家(en)/城市索引/组织 key('individual' = 个人) 过滤 */
-  scopeSubs(countryEn, cityIdx, orgKey){
+  scopeSubs(countryEn, cityIdx, orgKey, date = null){
     return this.submissions.filter(s => {
       const c = this.city(s.city);
+      if(date != null && this.actionDate(s) !== date) return false;
       if(countryEn != null && c.country.en !== countryEn) return false;
       if(cityIdx != null && s.city !== cityIdx) return false;
       if(orgKey != null){
@@ -524,9 +525,31 @@ const PROOF = {
   },
 
   /* 行动地图:国家 → 状态计数 + 城市计数 */
-  mapCountryStats(){
+  actionDate(submission){
+    const d = submission.time;
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  },
+
+  actionCoverage(submissions){
+    const verified = submissions.filter(s => s.status === 'verified');
+    // Reporting groups match the map's three planning cards. Existing taxonomy
+    // and Analytics categories remain unchanged (retrofit is grouped separately).
+    const groups = [
+      { key: 'environment', icon: '🌿', actions: ['cleanup', 'wetland', 'afforest'] },
+      { key: 'energy', icon: '⚡', actions: ['ev', 'solar'] },
+      { key: 'buildings', icon: '🏠', actions: ['retrofit'] }
+    ];
+    return { total: submissions.length, verified: verified.length,
+      groups: groups.map(group => ({ ...group, actions: group.actions.map(key => {
+        const count = verified.filter(s => s.action === key).length;
+        return { key, verified: count, recorded: submissions.filter(s => s.action === key).length,
+          share: verified.length ? count / verified.length * 100 : 0 };
+      }) })) };
+  },
+
+  mapCountryStats(submissions = this.submissions){
     const map = {};
-    this.submissions.forEach(s => {
+    submissions.forEach(s => {
       const c = this.city(s.city);
       const k = c.country.en;
       const r = map[k] = map[k] || { name: c.country, total: 0, verified: 0, flagged: 0, rejected: 0, pending: 0, cities: {} };
@@ -540,9 +563,9 @@ const PROOF = {
   /* ============================================================
      覆盖缺口分析(基于已验证社区项目)
      ============================================================ */
-  gapScopes(){
-    const scopes = [{ key: 'global', name: null, verified: this.submissions.filter(s => s.status === 'verified').length }];
-    this.countryRows().forEach(r => {
+  gapScopes(submissions = this.submissions){
+    const scopes = [{ key: 'global', name: null, verified: submissions.filter(s => s.status === 'verified').length }];
+    this.countryRows(submissions).forEach(r => {
       const v = r.verified;
       if(v >= 4) scopes.push({ key: r.key, name: r.name, verified: v });
     });
@@ -552,9 +575,9 @@ const PROOF = {
   /* 返回缺口卡片:
      { kind:'cat'|'action', dom/weak(类别或行动 key), d/w(占比%),
        suggest(建议发起的行动 key), cat(行动级缺口所属类别) } */
-  gapAnalysis(scopeKey){
-    const subs = scopeKey === 'global' ? this.submissions
-      : this.submissions.filter(s => this.city(s.city).country.en === scopeKey);
+  gapAnalysis(scopeKey, submissions = this.submissions){
+    const subs = scopeKey === 'global' ? submissions
+      : submissions.filter(s => this.city(s.city).country.en === scopeKey);
     const V = subs.filter(s => s.status === 'verified');
     const cards = [];
     if(V.length < 4) return cards;

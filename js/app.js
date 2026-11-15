@@ -739,6 +739,8 @@ function buildDup(){
    ============================================================ */
 let HIER = { level: 0, country: null, city: null, org: null };
 let GAP_SCOPE = 'global';
+let HIER_DATE = null;
+let GAP_CITY = null;
 
 function buildAnalytics(){
   const sec = $('#tab-analytics');
@@ -756,6 +758,19 @@ function buildAnalytics(){
 
   function renderHier(){
     hierBody.innerHTML = '';
+    const period = document.createElement('div');
+    period.className = 'hier-period';
+    const dateLabel = document.createElement('span');
+    dateLabel.textContent = t('mapx.period') + ': ' + (HIER_DATE || t('mapx.allDates'));
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date'; dateInput.className = 'txt-in'; dateInput.value = HIER_DATE || '';
+    dateInput.setAttribute('aria-label', t('mapx.analyticsDate'));
+    dateInput.addEventListener('change', () => { HIER_DATE = dateInput.value || null; renderHier(); renderGap(); });
+    const clearDate = document.createElement('button');
+    clearDate.className = 'btn btn-ghost'; clearDate.textContent = t('mapx.allDates');
+    clearDate.addEventListener('click', () => { HIER_DATE = null; renderHier(); renderGap(); });
+    period.append(dateLabel, dateInput, clearDate); hierBody.appendChild(period);
+    const periodSubs = PROOF.scopeSubs(null, null, null, HIER_DATE);
     /* 面包屑 */
     const crumb = document.createElement('div');
     crumb.className = 'hier-crumb';
@@ -789,13 +804,13 @@ function buildAnalytics(){
 
     let rows = null;
     if(HIER.level === 0){
-      rows = PROOF.countryRows().map(r => ({ icon: '🌐', name: lb(r.name), sub: null, stat: r,
+      rows = PROOF.countryRows(periodSubs).map(r => ({ icon: '🌐', name: lb(r.name), sub: null, stat: r,
         click: () => { HIER = { level: 1, country: r.key, city: null, org: null }; renderHier(); } }));
     } else if(HIER.level === 1){
-      rows = PROOF.cityRows(HIER.country).map(r => ({ icon: '🏙️', name: lb(r.name), sub: null, stat: r,
+      rows = PROOF.cityRows(HIER.country, periodSubs).map(r => ({ icon: '🏙️', name: lb(r.name), sub: null, stat: r,
         click: () => { HIER = { level: 2, country: HIER.country, city: r.key, org: null }; renderHier(); } }));
     } else if(HIER.level === 2){
-      rows = PROOF.orgRows(HIER.city).map(r => ({
+      rows = PROOF.orgRows(HIER.city, periodSubs).map(r => ({
         icon: r.key === 'individual' ? '🙂' : (TYPE_ICONS[r.type] || '🏢'),
         name: r.key === 'individual' ? t('an.hier.individual') : lb(r.name),
         sub: r.key === 'individual' ? null : t('org.type.' + r.type),
@@ -805,7 +820,7 @@ function buildAnalytics(){
     }
     if(rows === null){
       /* 组织层:直接列出该组织的提交 */
-      const subs = PROOF.scopeSubs(HIER.country, HIER.city, HIER.org);
+      const subs = PROOF.scopeSubs(HIER.country, HIER.city, HIER.org, HIER_DATE);
       if(!subs.length){
         const p = document.createElement('p');
         p.className = 'muted-text';
@@ -843,25 +858,44 @@ function buildAnalytics(){
     }
   }
 
+  window.__openMapAnalytics = state => {
+    HIER = { level: state.city != null ? 2 : (state.country ? 1 : 0), country: state.country, city: state.city, org: null };
+    HIER_DATE = state.date;
+    GAP_SCOPE = state.country || 'global';
+    GAP_CITY = state.city;
+    renderHier(); renderGap();
+    switchTab('analytics');
+    hierCard.root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   function renderGap(){
     gapBody.innerHTML = '';
-    const scopes = PROOF.gapScopes();
+    const gapSubs = PROOF.scopeSubs(null, GAP_CITY, null, HIER_DATE);
+    const scopes = GAP_CITY != null ? [{ key: GAP_SCOPE }] : PROOF.gapScopes(gapSubs);
+    const period = document.createElement('p');
+    period.className = 'qc-hint'; period.textContent = t('mapx.period') + ': ' + (HIER_DATE || t('mapx.allDates'));
+    gapBody.appendChild(period);
     const row = document.createElement('div');
     row.className = 'chip-row';
     scopes.forEach(sc => {
       const b = document.createElement('button');
       b.className = 'chip' + (GAP_SCOPE === sc.key ? ' active' : '');
-      b.textContent = sc.key === 'global' ? t('an.gap.global') : countryName(sc.key);
+      b.textContent = GAP_CITY != null ? lb(PROOF.city(GAP_CITY)) : sc.key === 'global' ? t('an.gap.global') : countryName(sc.key);
       b.addEventListener('click', () => { GAP_SCOPE = sc.key; renderGap(); });
       row.appendChild(b);
     });
     gapBody.appendChild(row);
-    const scopeLabel = GAP_SCOPE === 'global' ? t('an.gap.global') : countryName(GAP_SCOPE);
-    const cards = PROOF.gapAnalysis(GAP_SCOPE);
+    if(GAP_CITY != null){
+      const clearCity = document.createElement('button');
+      clearCity.className = 'link-btn'; clearCity.textContent = t('map.city.all');
+      clearCity.addEventListener('click', () => { GAP_CITY = null; renderGap(); }); gapBody.appendChild(clearCity);
+    }
+    const scopeLabel = GAP_CITY != null ? lb(PROOF.city(GAP_CITY)) : GAP_SCOPE === 'global' ? t('an.gap.global') : countryName(GAP_SCOPE);
+    const cards = PROOF.gapAnalysis(GAP_SCOPE, gapSubs);
     if(!cards.length){
       const p = document.createElement('p');
       p.className = 'muted-text';
-      p.textContent = PROOF.gapScopes().some(s => s.key === GAP_SCOPE) ? t('an.gap.balanced') : t('an.gap.none');
+      p.textContent = gapSubs.filter(s => s.status === 'verified' && (GAP_SCOPE === 'global' || PROOF.city(s.city).country.en === GAP_SCOPE)).length >= 4 ? t('an.gap.balanced') : t('an.gap.none');
       gapBody.appendChild(p);
       return;
     }
@@ -1054,294 +1088,6 @@ function buildAnalytics(){
 /* ============================================================
    行动地图(全球 → 国家 → 城市 · 日期回放)
    ============================================================ */
-let MAP_STATE = { country: null, city: null, date: null };
-
-function buildMap(){
-  const sec = $('#tab-map');
-  sec.innerHTML = '';
-  if(typeof MAP_DATA === 'undefined' || !MAP_DATA.countries){
-    const c = card(sec, t('map.title'), null);
-    const p = document.createElement('p');
-    p.className = 'muted-text';
-    p.textContent = t('map.nomap');
-    c.body.appendChild(p);
-    return;
-  }
-
-  const kpi = document.createElement('div');
-  kpi.className = 'kpi-grid';
-  kpi.id = 'map-kpis';
-  sec.appendChild(kpi);
-
-  const layout = document.createElement('div');
-  layout.className = 'map-layout';
-  sec.appendChild(layout);
-
-  const mapCard = card(layout, t('map.title'), t('map.sub'));
-  const mapBody = mapCard.body;
-  const side = document.createElement('div');
-  side.className = 'map-side';
-  layout.appendChild(side);
-  const detailCard = card(side, t('map.rank'), t('map.hint'));
-  const detailBody = detailCard.body;
-
-  const SVGNS = 'http://www.w3.org/2000/svg';
-  const mapStats = PROOF.mapCountryStats();
-  const fillOf = v => v <= 0 ? '#eef1f4' : RAMP_BLUE[Math.min(12, Math.ceil(Math.log2(v + 1) * 2))];
-
-  function renderMapSvg(){
-    mapBody.innerHTML = '';
-    const svg = document.createElementNS(SVGNS, 'svg');
-    svg.setAttribute('viewBox', '-180 -58 360 148');
-    svg.classList.add('map-svg');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', t('map.title'));
-    const bg = document.createElementNS(SVGNS, 'rect');
-    bg.setAttribute('x', -180); bg.setAttribute('y', -58);
-    bg.setAttribute('width', 360); bg.setAttribute('height', 148);
-    bg.setAttribute('fill', '#f7f9fb');
-    svg.appendChild(bg);
-    (MAP_DATA.countries || []).forEach(cn => {
-      const st = mapStats[cn.name];
-      const p = document.createElementNS(SVGNS, 'path');
-      p.setAttribute('d', cn.d);
-      p.setAttribute('fill', st ? fillOf(st.verified) : '#eef1f4');
-      p.setAttribute('stroke', MAP_STATE.country === cn.name ? '#0b0b0b' : '#d5d9dd');
-      p.setAttribute('stroke-width', MAP_STATE.country === cn.name ? 0.7 : 0.3);
-      p.classList.add('map-path');
-      p.addEventListener('click', () => {
-        if(!st) return;
-        MAP_STATE = { country: cn.name, city: null, date: null };
-        renderMap();
-      });
-      p.addEventListener('mousemove', ev => {
-        const rows = [{ title: mapCountryName(cn) }];
-        if(st){
-          ['verified', 'flagged', 'rejected', 'pending'].forEach(k2 => {
-            rows.push({ color: PROOF.statuses[k2].color, name: t('status.' + k2), value: String(st[k2]) });
-          });
-        } else {
-          rows.push({ color: '#c3c2b7', name: t('map.nodata'), value: '0' });
-        }
-        showTip(mapBody, ev, rows);
-      });
-      p.addEventListener('mouseleave', hideTip);
-      svg.appendChild(p);
-    });
-    /* 城市行动点:点大小 = 提交数 */
-    PROOF.cities.forEach((cc, i) => {
-      const n = PROOF.submissions.filter(s => s.city === i).length;
-      if(!n) return;
-      const g = document.createElementNS(SVGNS, 'g');
-      g.classList.add('map-pin');
-      const r = 3 + Math.sqrt(n) * 1.1;
-      const halo = document.createElementNS(SVGNS, 'circle');
-      halo.setAttribute('cx', cc.lon); halo.setAttribute('cy', -cc.lat);
-      halo.setAttribute('r', r + 2.2);
-      halo.setAttribute('fill', 'rgba(42,120,214,0.16)');
-      const dot = document.createElementNS(SVGNS, 'circle');
-      dot.setAttribute('cx', cc.lon); dot.setAttribute('cy', -cc.lat);
-      dot.setAttribute('r', r);
-      dot.setAttribute('fill', '#2a78d6');
-      dot.setAttribute('stroke', '#fff');
-      dot.setAttribute('stroke-width', 0.45);
-      if(MAP_STATE.city === i){
-        dot.setAttribute('stroke', '#0b0b0b');
-        dot.setAttribute('stroke-width', 0.9);
-      }
-      g.appendChild(halo); g.appendChild(dot);
-      g.addEventListener('click', ev => {
-        ev.stopPropagation();
-        MAP_STATE = { country: cc.country.en, city: i, date: null };
-        renderMap();
-      });
-      g.addEventListener('mousemove', ev => {
-        const st2 = { verified: 0, flagged: 0, rejected: 0, pending: 0 };
-        PROOF.submissions.filter(s => s.city === i).forEach(s => st2[s.status]++);
-        showTip(mapBody, ev, [{ title: lb(cc) + ' · ' + lb(cc.country) }].concat(
-          ['verified', 'flagged', 'rejected', 'pending'].map(k2 => ({ color: PROOF.statuses[k2].color, name: t('status.' + k2), value: String(st2[k2]) }))
-        ));
-      });
-      g.addEventListener('mouseleave', hideTip);
-      svg.appendChild(g);
-    });
-    mapBody.appendChild(svg);
-    /* 图例 */
-    const lg = document.createElement('div');
-    lg.className = 'map-legend';
-    lg.innerHTML = '<span>' + t('map.legend') + '</span>';
-    [0, 1, 2, 4, 8, 16].forEach(v => {
-      const sw = document.createElement('span');
-      sw.className = 'swatch';
-      sw.style.background = fillOf(v);
-      sw.title = '~' + v;
-      lg.appendChild(sw);
-    });
-    const note = document.createElement('span');
-    note.textContent = '· ' + t('map.pin.hint');
-    lg.appendChild(note);
-    mapBody.appendChild(lg);
-  }
-
-  const mkListRow = s => {
-    const row = document.createElement('div');
-    row.className = 'feed-row';
-    const th = photoThumb(s, 56);
-    const info = document.createElement('div');
-    info.className = 'feed-info';
-    const top = document.createElement('div');
-    top.className = 'feed-top';
-    const idEl = document.createElement('b');
-    idEl.textContent = s.id;
-    top.appendChild(idEl);
-    top.appendChild(lvBadge(s.status));
-    top.appendChild(actTag(s.action));
-    if(s.org) top.appendChild(orgTag(s.org));
-    const meta = document.createElement('div');
-    meta.className = 'feed-meta';
-    meta.textContent = s.submitter + ' · ' + lb(PROOF.city(s.city)) + ' · ' + fmtTime(s.time) + ' · ' + t('qc.score') + ' ' + s.score;
-    info.appendChild(top); info.appendChild(meta);
-    row.appendChild(th); row.appendChild(info);
-    row.addEventListener('click', () => openDrawer(s.id));
-    return row;
-  };
-
-  function renderDetail(){
-    detailBody.innerHTML = '';
-    if(!MAP_STATE.country){
-      detailCard.root.querySelector('h3').textContent = t('map.rank');
-      detailCard.root.querySelector('.card-sub').textContent = t('map.hint');
-      const tb = document.createElement('div');
-      tb.className = 'chart-table';
-      tb.innerHTML = '<table><thead><tr><th>' + t('map.rank.col.country') + '</th><th>' + t('map.rank.col.verified') + '</th><th>' + t('map.rank.col.dup') + '</th><th>' + t('map.rank.col.rejected') + '</th><th>' + t('map.rank.col.avg') + '</th></tr></thead><tbody></tbody></table>';
-      const tbody = tb.querySelector('tbody');
-      PROOF.countryRows().forEach(r => {
-        const tr = document.createElement('tr');
-        tr.style.cursor = 'pointer';
-        tr.innerHTML = '<td><b>' + lb(r.name) + '</b></td>' +
-          '<td style="color:' + PROOF.statuses.verified.text + '">✓ ' + r.verified + '</td>' +
-          '<td style="color:' + PROOF.statuses.flagged.text + '">⚠ ' + r.flagged + '</td>' +
-          '<td style="color:' + PROOF.statuses.rejected.text + '">✗ ' + r.rejected + '</td>' +
-          '<td>' + fmtNum(r.avg, 1) + '</td>';
-        tr.addEventListener('click', () => { MAP_STATE = { country: r.key, city: null, date: null }; renderMap(); });
-        tbody.appendChild(tr);
-      });
-      detailBody.appendChild(tb);
-      return;
-    }
-    const st = mapStats[MAP_STATE.country];
-    const cInfo = PROOF.cities.find(c => c.country.en === MAP_STATE.country);
-    detailCard.root.querySelector('h3').textContent = t('map.detail.title', { c: lb(cInfo.country) });
-    detailCard.root.querySelector('.card-sub').textContent = t('map.detail.sub', { v: st.verified, f: st.flagged, r: st.rejected, p: st.pending });
-    const back = document.createElement('button');
-    back.className = 'link-btn';
-    back.style.marginBottom = '6px';
-    back.textContent = t('map.clear');
-    back.addEventListener('click', () => { MAP_STATE = { country: null, city: null, date: null }; renderMap(); });
-    detailBody.appendChild(back);
-    /* 城市筛选 */
-    const cf = document.createElement('div');
-    cf.className = 'filter-row';
-    cf.innerHTML = '<span class="filter-label">' + t('map.city.filter') + '</span><span class="chip-row" id="map-cities"></span>';
-    const cRow = cf.querySelector('#map-cities');
-    const allB = document.createElement('button');
-    allB.className = 'chip' + (MAP_STATE.city == null ? ' active' : '');
-    allB.textContent = t('map.city.all');
-    allB.addEventListener('click', () => { MAP_STATE.city = null; MAP_STATE.date = null; renderMap(); });
-    cRow.appendChild(allB);
-    Object.keys(st.cities).forEach(cIdx => {
-      const cc = PROOF.city(+cIdx);
-      const b = document.createElement('button');
-      b.className = 'chip' + (MAP_STATE.city === +cIdx ? ' active' : '');
-      b.textContent = lb(cc) + ' (' + st.cities[cIdx] + ')';
-      b.addEventListener('click', () => { MAP_STATE.city = +cIdx; MAP_STATE.date = null; renderMap(); });
-      cRow.appendChild(b);
-    });
-    detailBody.appendChild(cf);
-    /* 日期回放 */
-    const scope = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null);
-    const days = {};
-    scope.forEach(s => { const k = dateKey(s.time); (days[k] = days[k] || []).push(s); });
-    const dKeys = Object.keys(days).sort();
-    const ds = document.createElement('div');
-    ds.className = 'map-sub-title';
-    ds.textContent = t('map.dates');
-    detailBody.appendChild(ds);
-    if(!dKeys.length){
-      const p = document.createElement('p');
-      p.className = 'muted-text';
-      p.textContent = t('map.list.empty');
-      detailBody.appendChild(p);
-      return;
-    }
-    const strip = document.createElement('div');
-    strip.className = 'dstrip';
-    const maxDay = Math.max(...dKeys.map(k => days[k].length));
-    dKeys.forEach(k => {
-      const list = days[k];
-      const bar = document.createElement('div');
-      bar.className = 'dbar' + (MAP_STATE.date === k ? ' sel' : '');
-      const inner = document.createElement('div');
-      inner.className = 'bar';
-      ['verified', 'pending', 'flagged', 'rejected'].forEach(stKey => {
-        const n = list.filter(s => s.status === stKey).length;
-        if(!n) return;
-        const seg = document.createElement('div');
-        seg.className = 'seg';
-        seg.style.height = Math.max(3, Math.round(n / maxDay * 74)) + 'px';
-        seg.style.background = PROOF.statuses[stKey].color;
-        seg.title = t('status.' + stKey) + ' ' + n;
-        inner.appendChild(seg);
-      });
-      const lbl = document.createElement('span');
-      lbl.className = 'lbl';
-      lbl.textContent = k.slice(5).replace('-', '/');
-      bar.appendChild(inner); bar.appendChild(lbl);
-      bar.addEventListener('click', () => {
-        MAP_STATE.date = MAP_STATE.date === k ? null : k;
-        renderMap();
-      });
-      strip.appendChild(bar);
-    });
-    detailBody.appendChild(strip);
-    /* 行动清单 */
-    const lt = document.createElement('div');
-    lt.className = 'map-sub-title';
-    lt.textContent = t('map.list.title') + (MAP_STATE.date ? ' · ' + MAP_STATE.date : '');
-    detailBody.appendChild(lt);
-    const list = (MAP_STATE.date ? days[MAP_STATE.date] : scope) || [];
-    if(!list.length){
-      const p = document.createElement('p');
-      p.className = 'muted-text';
-      p.textContent = t('map.list.empty');
-      detailBody.appendChild(p);
-    } else {
-      list.slice().sort((a, b) => b.time - a.time).forEach(mkListRow);
-    }
-  }
-
-  function renderMap(){
-    renderMapSvg();
-    renderDetail();
-    const scope = MAP_STATE.country ? PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null) : PROOF.submissions;
-    const kpiEl = $('#map-kpis');
-    kpiEl.innerHTML = '';
-    const cnt = st2 => scope.filter(s => s.status === st2).length;
-    const avg = scope.length ? scope.reduce((a, s) => a + s.score, 0) / scope.length : 0;
-    const tiles = [
-      { label: t('map.kpi.total'), value: fmtNum(scope.length, 0), delta: t('map.pin.hint'), deltaIcon: '📍', deltaCls: 'plain' },
-      { label: t('map.kpi.verified'), value: fmtNum(cnt('verified'), 0), delta: t('kpi.rateNote'), deltaIcon: '✓', deltaCls: 'good' },
-      { label: t('map.kpi.dup'), value: fmtNum(cnt('flagged'), 0), delta: t('kpi.dupNote'), deltaIcon: '⚠', deltaCls: 'warn' },
-      { label: t('map.kpi.rejected'), value: fmtNum(cnt('rejected'), 0), delta: t('an.th.3'), deltaIcon: '✗', deltaCls: 'bad' },
-      { label: t('map.kpi.avg'), value: fmtNum(avg, 1), delta: t('kpi.avgNote'), deltaIcon: '◈', deltaCls: 'plain' }
-    ];
-    tiles.forEach(o => kpiEl.appendChild(statTile(o)));
-  }
-
-  window.__renderMap = renderMap;
-  renderMap();
-}
-
 /* ============================================================
    智能体
    ============================================================ */

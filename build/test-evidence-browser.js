@@ -109,7 +109,9 @@ async function realModel(){
   try{
     await page.goto(URL_BASE+'/?lang=en&tab=submit&nosplash');
     // Update the shell for repeat development runs, retaining the real model cache.
-    await page.evaluate(()=>caches.delete('proof-offline-shell-v1'));await page.reload();
+    await page.evaluate(async()=>{
+      for(const name of await caches.keys())if(name.startsWith('proof-offline-shell-'))await caches.delete(name);
+    });await page.reload();
     await submit(page);const verdict=await page.locator('.verdict-banner').innerText();
     await page.locator('#run-real-model').click();await waitForModel(page);
     await page.locator('.model-output select').selectOption('6');
