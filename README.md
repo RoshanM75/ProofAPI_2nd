@@ -62,6 +62,20 @@ MODEL_TEST=1 NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-evide
 
 Set `CHROMIUM_PATH` for your installed Chromium if needed. The first command checks the default path, paired evidence, source labels, model-load fallback, Chinese mobile layout and `file://` (reports a skip if browser policy blocks local-file navigation). `MODEL_TEST=1` additionally runs genuine CLIP inference, checks all six probabilities sum to one, performs a fresh-worker cache-only run, reloads the app offline, checks original-image reattachment by SHA, and tests fallback after evicting weights. The real-model test downloads ~150 MB and intentionally removes its cached weights at the end. Use `PROOF_TEST_PROFILE` only with a disposable test profile. In a managed network, `PROOF_TEST_MIRROR` can point to a test-only streaming mirror that verifies upstream TLS; it is never an application setting.
 
+## Action Map: global and local community explorer
+
+The **Global action map** and **Country ranking** now stay visible. Below them, the **Community action explorer** starts with a global summary, verification metrics, country breakdown and a community action list; no country click is required. Country/city selectors, an exact **action date** picker, clickable recorded-date bars, **All dates** and **Reset all filters** control a shared scope. Dates refer to the claimed action date, not upload time. Choosing a location preserves the date; choosing a date preserves the location. Empty scopes explicitly show no records instead of inheriting all-time statistics.
+
+Click a map country, city pin, ranking entry or breakdown row to drill down. Search countries or the 14 recorded cities in English/Chinese (accent-insensitive, so “Medellin” finds Medellín). Selection zooms to the place, highlights it and displays its country/city/community verification analytics directly below. **+ / −**, drag-to-pan and **World view** control the viewport. On a selected date, the map and ranking use that day's global records: countries with any action status are outlined in gold, blue still encodes verified records, and pins show that day's city counts. Zero-data countries remain selectable and clearly empty.
+
+**Open in Analytics** carries the country, city and action date into the existing hierarchy and gap analysis. The hierarchy also has its own date control. These use the same aggregation functions as the map; other existing Analytics charts retain their own stated scope. Map summaries, rankings, lists and coverage recompute after local submissions/review changes instead of holding a stale initial snapshot.
+
+**Action coverage & opportunities** follows the same map filters and shows six action types in three planning groups (Environmental, Energy, Buildings). Counts are **verified / recorded submissions**, while bars are each type's share of all verified actions in that scope. These reporting groups do not change the existing two-category data taxonomy. Missing verified types get concrete discussion options; with at least four verified records, types below 10% share also get a clearly labelled limited-coverage suggestion. A cleanup-only scope therefore surfaces options such as suitable native-tree planting, wetland restoration, solar surveys, charging-demand studies and energy audits. Sparse/empty evidence is labelled, and no needs inference is made with zero verified records. The panel explicitly cautions that missing records may mean incomplete reporting, not ecological need.
+
+The map remains zero-dependency and uses the bundled Natural Earth geometry, with no geocoding, map tiles or network calls. Its new script is included in the optional offline shell cache; existing CLIP weights are retained across the shell version change.
+
+Checks: `node build/test-map-explorer.js` for scopes, coverage denominators and live aggregation; `NODE_PATH="$PWD/work/test-tools/node_modules" node build/test-map-browser.js` with the server running for global/date filtering, highlights, search, zoom/pan, Analytics handoff, recommendations, live updates, Chinese mobile layout and offline reload.
+
 ## One clear flow — submit → result → flags → receipt
 
 The first tab (**提交验证 / Submit**) is the end-to-end flow Sadaf asked for:
@@ -92,7 +106,7 @@ The dashboard covers the four review dimensions from our brief — **photo submi
 | **Review queue** | Core review workflow | Status/action filters, photo cards with composite ring + 3 sub-score bars and org chips, detail drawer, approve / reject (updates KPIs live), one-click dispatch to the agent |
 | **Duplicates** | Duplicate groups & interception | 5 groups (exact hash / perceptual hash / crop-filter variants), side-by-side photo comparison with similarity meters & time gaps, confirm / mark-false-positive |
 | **Analytics** | Model performance + planning layer | Hierarchy drill-down (global → country → city → org → submissions), **coverage-gap cards** ("X is active here but Y is under-served — suggest Y projects"), plus the v0.1 charts (throughput, per-type deviation, sub-model means, thresholds, auto-vs-human agreement) |
-| **Action map** | Where projects happen | Natural Earth world map (offline, embedded), countries colored by verified-project ramp, city dots sized by submission count; click a country → project list with verified/duplicate/rejected/pending counts, city chips, and a **date-replay strip** (click a date → that day's actions) |
+| **Action map** | Explore global and local community activity | Search or click to zoom into countries/cities; synchronized location/date filters, global overview, direct verification analytics, action list, date highlights, and verified coverage/opportunity cards; open the same scope in Analytics |
 | **Agent** | Evidence cross-check agent | Pipeline diagram with the agent slot, conversational agent that runs a 4-step investigation (metadata → forensics with real ELA heatmap → geospatial → registry with real counts) and outputs a verdict with confidence and a citable evidence chain; unregistered orgs → `ORG_UNREGISTERED` → human review |
 | **About** | Honesty layer & attribution | "What is actually computed" table (measured / heuristic / demo-rule labels), demo-data notice, privacy statement, QR code + repo link, full Wikimedia Commons photo attribution list |
 
@@ -238,6 +252,8 @@ proof-api-dashboard/
                        gap analysis, map stats (deterministic seed)
   js/map-data.js       embedded world map SVG paths (generated by build/build-map.js
                        from Natural Earth 50m, public domain; offline, no fetch)
+  js/map-explorer.js   interactive map, shared location/date filters, analytics,
+                       global/local action lists and coverage opportunities
   js/photos.js         deterministic SVG photo-scene generator
   js/i18n.js           zh/en dictionary, t()/lb()
   js/charts.js         zero-dep SVG chart engine (light ink, validated ramps)
