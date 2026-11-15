@@ -261,7 +261,7 @@ zh: {
   'submit.claim.dateNote':'日期将用于行动地图的日期回放',
   'submit.err.org':'请先选择所属组织',
   /* 行动地图 */
-  'nav.map':'行动地图',
+  'nav.map':'行动地图', 'nav.regions':'区域比较',
   'map.title':'全球行动地图',
   'map.sub':'点击国家查看社区项目;点击日期条回放当日行动;蓝色色阶 = 已验证项目数',
   'map.hint':'点击地图上的国家(或右侧排行)进入该国详情:社区项目清单、状态构成与每日行动回放。',
@@ -544,7 +544,7 @@ en: {
   'submit.claim.date':'Action date',
   'submit.claim.dateNote':'The date is used in the action-map date replay',
   'submit.err.org':'Select an organisation first',
-  'nav.map':'Action Map',
+  'nav.map':'Action Map', 'nav.regions':'Regions',
   'map.title':'Global action map',
   'map.sub':'Click a country to browse its community projects; click a date bar to replay that day\'s actions; blue ramp = verified projects',
   'map.hint':'Click a country on the map (or in the ranking) to open its detail: community project list, status mix and daily action replay.',

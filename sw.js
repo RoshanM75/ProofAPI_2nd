@@ -1,9 +1,10 @@
 'use strict';
-// Registered only by the explicit model opt-in. No service worker on default path.
-const SHELL_CACHE = 'proof-offline-shell-v3';
+// Registered by explicit model or offline-app opt-in. No worker on default path.
+const SHELL_CACHE = 'proof-offline-shell-v4';
 const FILES = [
   './', './index.html', './css/style.css', './css/experience.css', './js/data.js', './js/photos.js',
   './js/community-data.js', './js/experience.js',
+  './css/field-tools.css', './js/insights.js', './js/field-tools.js', './js/capture.js', './js/regions.js',
   './js/map-data.js', './js/map-explorer.js', './js/i18n.js', './js/charts.js', './js/api.js', './js/app.js',
   './js/model-config.js', './js/evidence.js', './js/model-worker.js', './js/ndvi-data.js',
   './assets/data/landsat-ndvi.json', './manifest.webmanifest', './assets/icon-192.png',
@@ -16,13 +17,14 @@ const FILES = [
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
 self.addEventListener('message', event => {
-  if(event.data !== 'prepare-offline') return;
+  if(event.data !== 'prepare-offline' && event.data?.type !== 'prepare-offline') return;
   event.waitUntil((async () => {
     try {
       const cache = await caches.open(SHELL_CACHE);
       // A warm cache must not require the network to prepare an offline rerun.
       const missing = [];
-      for(const file of FILES){
+      const files = event.data?.appOnly ? FILES.filter(file => !file.startsWith('./assets/vendor/')) : FILES;
+      for(const file of files){
         const url = new URL(file, self.location.href).href;
         if(!await cache.match(url)) missing.push(file);
       }
