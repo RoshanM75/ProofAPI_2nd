@@ -142,6 +142,7 @@ globalThis.ProofExperience = (() => {
     if (window.__renderQueue) window.__renderQueue();
     if (window.__refreshOverview) window.__refreshOverview();
     if (window.__renderAnalytics) window.__renderAnalytics();
+    if (window.__renderRegions) window.__renderRegions();
     buildHome();
     if (storyId) renderStory();
   }
@@ -745,8 +746,7 @@ globalThis.ProofExperience = (() => {
       const url = new URL(location.href);
       url.searchParams.set('tab', 'story');
       url.searchParams.set('story', id);
-      url.searchParams.delete('map-country');
-      url.searchParams.delete('map-date');
+      [...url.searchParams.keys()].filter(key => key.startsWith('map-')).forEach(key => url.searchParams.delete(key));
       history.pushState({ story: id }, '', url);
     } catch (e) {}
     document.querySelector('#tab-story h2')?.focus({ preventScroll: true });
@@ -824,6 +824,15 @@ globalThis.ProofExperience = (() => {
       main.appendChild(figure);
       p(main, L('Review stages for latest action record: ', '最新行动记录的复核阶段：') + first.id);
       stages(main, first);
+      const before = project.observations.filter(o => o.kind === 'baseline' && o.photo && o.date < PROOF.actionDate(first)).sort((a, b) => b.date.localeCompare(a.date))[0];
+      const after = project.observations.filter(o => o.kind === 'followup' && o.photo && before && o.date > before.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+      if(before && (after?.photo || first.thumb || first.photo)){
+        main.appendChild(n('h3', 'cx-section-heading', L('Compare the recorded views', '比较已记录视图')));
+        ProofTools.slider(main, before.photo, after?.photo || first.thumb || first.photo, {
+          before: L('Baseline · ', '基线 · ') + before.date,
+          after: (after ? L('Follow-up · ', '复查 · ') : L('Action · ', '行动 · ')) + (after?.date || PROOF.actionDate(first))
+        });
+      }
     } else
       p(
         main,
@@ -850,6 +859,7 @@ globalThis.ProofExperience = (() => {
       stats.appendChild(e);
     });
     aside.appendChild(stats);
+    aside.appendChild(b(L('Download project summary', '下载项目摘要'), () => ProofTools.exportProject(project)));
     if (project.plan) {
       aside.append(n('h3', '', L('Local plan', '当地方案')), n('p', '', project.plan));
     }

@@ -30,7 +30,7 @@ function orgTag(key){
   const custom = !!(key && key.startsWith('custom:'));
   const b = document.createElement('span');
   b.className = 'orgtag' + (custom ? ' orgtag-custom' : '');
-  b.textContent = (custom ? '🏢 ' : (o ? (TYPE_ICONS[o.type] || '🏢') + ' ' : '🙂 ')) + orgName(key);
+  b.append(ProofTools.icon(custom || o?.type === 'company' ? 'building' : o ? 'community' : 'user'), document.createTextNode(orgName(key)));
   if(custom){
     const badge = document.createElement('i');
     badge.className = 'orgtag-badge';
@@ -89,7 +89,7 @@ function actTag(key){
   const a = ACT[key];
   const b = document.createElement('span');
   b.className = 'cat';
-  b.textContent = a.icon + ' ' + t('act.' + key);
+  b.append(ProofTools.icon(key), document.createTextNode(t('act.' + key)));
   b.style.color = a.color;
   b.style.background = a.color + '14';
   b.style.borderColor = a.color + '4d';
@@ -458,6 +458,7 @@ function buildQueue(){
     if(window.__refreshOverview) window.__refreshOverview();
     if(window.__renderMap) window.__renderMap();
     if(window.__renderAnalytics) window.__renderAnalytics();
+    if(window.__renderRegions) window.__renderRegions();
   }
   window.__setVerdict = setVerdict;
   window.__renderQueue = renderQueue;
@@ -775,15 +776,9 @@ function buildAnalytics(){
     const period = document.createElement('div');
     period.className = 'hier-period';
     const dateLabel = document.createElement('span');
-    dateLabel.textContent = t('mapx.period') + ': ' + (HIER_DATE || t('mapx.allDates'));
-    const dateInput = document.createElement('input');
-    dateInput.type = 'date'; dateInput.className = 'txt-in'; dateInput.value = HIER_DATE || '';
-    dateInput.setAttribute('aria-label', t('mapx.analyticsDate'));
-    dateInput.addEventListener('change', () => { HIER_DATE = dateInput.value || null; renderHier(); renderGap(); });
-    const clearDate = document.createElement('button');
-    clearDate.className = 'btn btn-ghost'; clearDate.textContent = t('mapx.allDates');
-    clearDate.addEventListener('click', () => { HIER_DATE = null; renderHier(); renderGap(); });
-    period.append(dateLabel, dateInput, clearDate); hierBody.appendChild(period);
+    dateLabel.textContent = t('mapx.period') + ': ' + ProofPeriod.label(HIER_DATE || {}, LANG === 'zh');
+    const dateControls = ProofTools.periodControls(HIER_DATE || {}, value => { HIER_DATE = value; renderHier(); renderGap(); }, { exactLabel: t('mapx.analyticsDate') });
+    period.append(dateLabel, dateControls.root); hierBody.appendChild(period);
     if(HIER_ACTION){
       const action = document.createElement('button'); action.className = 'chip active';
       action.textContent = t('act.' + HIER_ACTION) + ' ×';
@@ -880,7 +875,7 @@ function buildAnalytics(){
 
   window.__openMapAnalytics = state => {
     HIER = { level: state.city != null ? 2 : (state.country ? 1 : 0), country: state.country, city: state.city, org: null };
-    HIER_DATE = state.date;
+    HIER_DATE = ProofPeriod.clean(state);
     HIER_ACTION = state.action || null;
     GAP_SCOPE = state.country || 'global';
     GAP_CITY = state.city;
@@ -894,7 +889,7 @@ function buildAnalytics(){
     const gapSubs = PROOF.scopeSubs(null, GAP_CITY, null, HIER_DATE);
     const scopes = GAP_CITY != null ? [{ key: GAP_SCOPE }] : PROOF.gapScopes(gapSubs);
     const period = document.createElement('p');
-    period.className = 'qc-hint'; period.textContent = t('mapx.period') + ': ' + (HIER_DATE || t('mapx.allDates'));
+    period.className = 'qc-hint'; period.textContent = t('mapx.period') + ': ' + ProofPeriod.label(HIER_DATE || {}, LANG === 'zh');
     gapBody.appendChild(period);
     const row = document.createElement('div');
     row.className = 'chip-row';
@@ -1417,7 +1412,7 @@ let SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 
 function buildSubmit(){
   const sec = $('#tab-submit');
   sec.innerHTML = '';
-  SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', orgMode: 'org', org: 'org-gbg', orgCustom: '', orgType: 'community', date: null, projectId: null, result: null };
+  /* Preserve the in-progress local file and form when switching languages. */
 
   /* 步骤条 */
   const stepper = document.createElement('div');
@@ -1445,6 +1440,13 @@ function buildSubmit(){
     });
     renderSessionList();
   };
+  window.__renderSubmit = renderStage;
+  window.__submitFailure = err => {
+    SUBMIT.stage = 1; renderStage();
+    const message = document.createElement('p'); message.className = 'pt-error'; message.setAttribute('role', 'alert');
+    message.textContent = ProofTools.L('Local checks failed: ', '本地检查失败：') + (err?.message || 'verify failed');
+    body.prepend(message);
+  };
 
   function setFile(f){
     SUBMIT.file = f;
@@ -1452,7 +1454,7 @@ function buildSubmit(){
     SUBMIT.url = URL.createObjectURL(f);
     SUBMIT.dims = null;
     const img = new Image();
-    img.onload = () => { SUBMIT.dims = [img.naturalWidth, img.naturalHeight]; renderStage(); };
+    img.onload = () => { if(SUBMIT.file !== f) return; SUBMIT.dims = [img.naturalWidth, img.naturalHeight]; window.__renderSubmit(); };
     img.src = SUBMIT.url;
   }
 
@@ -1504,7 +1506,7 @@ function buildSubmit(){
       const b = document.createElement('button');
       b.className = 'chip' + (SUBMIT.action === a.key ? ' active' : '');
       b.disabled = !!SUBMIT.projectId && SUBMIT.action !== a.key;
-      b.innerHTML = '<span>' + a.icon + '</span>' + t('act.' + a.key);
+      b.append(ProofTools.icon(a.key), document.createTextNode(t('act.' + a.key)));
       b.addEventListener('click', () => { SUBMIT.action = a.key; renderStage(); });
       aRow.appendChild(b);
     });
@@ -1628,6 +1630,7 @@ function buildSubmit(){
     dt.type = 'date';
     dt.className = 'txt-in';
     dt.value = SUBMIT.date || dateKey(new Date());
+    SUBMIT.date = dt.value;
     dt.addEventListener('change', () => { SUBMIT.date = dt.value || null; });
     fRow5.appendChild(dt);
     const dn = document.createElement('span');
@@ -1638,6 +1641,11 @@ function buildSubmit(){
     form.appendChild(fRow5);
     body.appendChild(form);
     ProofExperience.submissionProject(body, SUBMIT, renderStage);
+    ProofCapture.render(body, () => SUBMIT, saved => {
+      if(SUBMIT.url) URL.revokeObjectURL(SUBMIT.url);
+      SUBMIT = { stage: 1, file: null, url: null, dims: null, action: null, city: 0, name: '', orgMode: 'ind', org: null, orgCustom: '', orgType: 'community', date: null, projectId: null, ...saved, result: null };
+      setFile(saved.file);
+    }, setFile);
 
     /* 操作 */
     const actions = document.createElement('div');
@@ -1678,13 +1686,14 @@ function buildSubmit(){
     if(!SUBMIT.file || !SUBMIT.action) return;
     if(SUBMIT.orgMode === 'org' && !SUBMIT.org) return;
     if(SUBMIT.org === '__custom' && SUBMIT.orgCustom.trim().length < 2) return;
+    const submittedState = SUBMIT;
     SUBMIT.stage = 2;
     renderStage();
     const payload = {
       file: SUBMIT.file, action: SUBMIT.action, city: SUBMIT.city, submitter: SUBMIT.name,
       org: SUBMIT.orgMode === 'org' ? (SUBMIT.org === '__custom' ? 'custom:' + SUBMIT.orgCustom.trim() : SUBMIT.org) : null,
       orgType: SUBMIT.orgMode === 'org' && SUBMIT.org === '__custom' ? SUBMIT.orgType : null,
-      date: SUBMIT.date || null, projectId: SUBMIT.projectId || null,
+      date: SUBMIT.date || null, projectId: SUBMIT.projectId || null, deviceLocation: SUBMIT.deviceLocation || null,
       actionEvidence: SUBMIT.actionEvidence?.action === SUBMIT.action ? SUBMIT.actionEvidence.values : {}
     };
     const rows = body.querySelectorAll('.pipe-run .row');
@@ -1700,24 +1709,23 @@ function buildSubmit(){
     proofApiSubmit(payload).then(r => { result = r; promiseDone = true; maybeFinish(); })
       .catch(err => {
         timers.forEach(clearTimeout);
-        body.innerHTML = '<p class="verdict-why" style="padding:10px 2px">⚠ ' + (err && err.message ? err.message : 'verify failed') + '</p>' +
-          '<button class="btn btn-ghost" type="button">← ' + t('submit.step1') + '</button>';
-        body.querySelector('button').addEventListener('click', () => { SUBMIT.stage = 1; renderStage(); });
+        if(SUBMIT === submittedState) window.__submitFailure(err);
       });
     function maybeFinish(){
       if(promiseDone && stagesDone.every(Boolean)){
         timers.forEach(clearTimeout);
-        SUBMIT.result = result;
         ProofEvidence.remember(result.submission.id, payload.file);
         ProofExperience.buildHome();
         if(ProofExperience.storyId) ProofExperience.renderStory();
-        SUBMIT.stage = 3;
-        renderStage();
+        if(SUBMIT === submittedState){
+          SUBMIT.result = result; SUBMIT.stage = 3; window.__renderSubmit();
+        }
         if(window.__refreshOverview) window.__refreshOverview();
         if(window.__renderQueue) window.__renderQueue();
         if(window.__renderDup) window.__renderDup();
         if(window.__renderMap) window.__renderMap();
         if(window.__renderAnalytics) window.__renderAnalytics();
+        if(window.__renderRegions) window.__renderRegions();
       }
     }
   }
@@ -2036,6 +2044,7 @@ function buildSubmit(){
    ============================================================ */
 function switchTab(id, preserveUrl = false){
   if(!document.getElementById('tab-' + id)) return;
+  if(id !== 'map') MAP_PLAYER?.pause();
   $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   $$('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + id));
   if(!preserveUrl)try {
@@ -2275,13 +2284,7 @@ function applyStaticLabels(){
   const lg = $('#lang-toggle');
   if(lg) lg.querySelectorAll('[data-l]').forEach(sp => sp.classList.toggle('active', sp.dataset.l === LANG));
   document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
-  $$('.tabs button').forEach(b => b.textContent = t('nav.' + b.dataset.tab));
-  $$('.tabs button').forEach(b => {
-    const dot = document.createElement('i');
-    dot.className = 'tab-dot';
-    dot.style.background = { home: '#16816a', guides: '#a17831', story: '#16816a', submit: '#199e70', overview: '#2a78d6', queue: '#eb6834', dup: '#ec835a', analytics: '#1baf7a', map: '#0e9aa7', agent: '#6250d6', about: '#8e44ad' }[b.dataset.tab];
-    b.prepend(dot);
-  });
+  $$('.tabs button').forEach(b => b.replaceChildren(ProofTools.icon(b.dataset.tab), document.createTextNode(t('nav.' + b.dataset.tab))));
   $('#footer-1').textContent = t('footer.1');
   $('#footer-2').textContent = t('footer.2');
   $('#footer-3').textContent = t('footer.3');
@@ -2302,6 +2305,7 @@ function buildAll(){
   buildDup();
   buildAnalytics();
   buildMap();
+  buildRegions();
   buildAgent();
   buildAbout();
 }
@@ -2320,12 +2324,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   restoreSession(); /* 会话提交并入数据集(队列/KPI 联动) */
   ProofCommunity.applyReviews();
+  const mapLink = ProofInsights.readMapLink(location.href);
+  if(mapLink){ MAP_STATE = mapLink.state; MAP_VIEW_MODE = mapLink.mode; }
   applyStaticLabels();
   buildAll();
   buildTour();
 
   window.addEventListener('popstate', () => {
     const query = new URLSearchParams(location.search);
+    const mapLink = ProofInsights.readMapLink(location.href);
+    if(mapLink){ MAP_STATE = mapLink.state; MAP_VIEW_MODE = mapLink.mode; window.__renderMap?.(); }
     if(query.get('story')) ProofExperience.restoreStory(query.get('story'));
     else switchTab(query.get('tab') || 'home', true);
   });
@@ -2375,16 +2383,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if(qp.get('demo-submit') === '2') setTimeout(() => window.__demoSubmit && window.__demoSubmit(), 7000);
     }
     if(qp.get('story')){ ProofExperience.restoreStory(qp.get('story')); return; }
-    /* ?map-country=Malaysia[&map-date=2026-11-10] 预选行动地图国家/日期(调试/截图用) */
-    const mc = qp.get('map-country');
-    const md = qp.get('map-date');
-    if(mc || md){
+    if(mapLink && (!tab || tab === 'map')){
       switchTab('map', true);
-      setTimeout(() => {
-        if(mc) MAP_STATE = { country: mc, city: null, date: md || null };
-        else MAP_STATE.date = md;
-        if(window.__renderMap) window.__renderMap();
-      }, 350);
     }
   } catch(e) {}
 });

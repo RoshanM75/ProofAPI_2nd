@@ -450,6 +450,11 @@ async function proofApiSubmit(payload){
   const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   const projectId = payload.projectId ? ProofCommunity.validateLink(payload.projectId, payload.action, payload.city, payload.date || PROOF.actionDate({time:new Date()})) : null;
   const actionEvidence = typeof ProofCommunity !== 'undefined' ? ProofCommunity.normaliseEvidence(payload.action, payload.actionEvidence || {}) : {};
+  const device = payload.deviceLocation;
+  const deviceLocation = device && Number.isFinite(device.lat) && Math.abs(device.lat) <= 90 &&
+    Number.isFinite(device.lon) && Math.abs(device.lon) <= 180 && Number.isFinite(device.accuracyMeters) && device.accuracyMeters >= 0
+    ? { lat: device.lat, lon: device.lon, accuracyMeters: device.accuracyMeters, capturedAt: device.capturedAt,
+      source: 'browser geolocation, user-attached; not photo EXIF' } : null;
   const file = payload.file;
   const buf = await file.arrayBuffer();
   const url = URL.createObjectURL(file);
@@ -561,6 +566,7 @@ async function proofApiSubmit(payload){
     projectId,
     guideVersion: typeof ProofCommunity !== 'undefined' ? ProofCommunity.guides[payload.action].version : null,
     actionEvidence,
+    ...(deviceLocation ? { deviceLocation } : {}),
     action: payload.action,
     city: payload.city,
     time,

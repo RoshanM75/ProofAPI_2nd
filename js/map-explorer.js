@@ -1,9 +1,14 @@
 'use strict';
-let MAP_STATE = { country: null, city: null, date: null, action: null };
+let MAP_STATE = { country: null, city: null, date: null, from: null, to: null, action: null };
 let MAP_VIEW = { x: -180, y: -85, w: 360, h: 170 };
 let MAP_VIEW_MODE = 'map-gallery';
+let MAP_PLAYER = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) MAP_PLAYER?.pause();
+});
 
 function buildMap() {
+  MAP_PLAYER?.dispose();
   const sec = $('#tab-map');
   sec.replaceChildren();
   if (typeof MAP_DATA === 'undefined') {
@@ -42,6 +47,8 @@ function buildMap() {
       : MAP_STATE.country
         ? countryLabel(MAP_STATE.country)
         : t('an.hier.global');
+  const periodLabel = () => ProofPeriod.label(MAP_STATE, LANG === 'zh');
+  const hasPeriod = () => !!(MAP_STATE.date || MAP_STATE.from || MAP_STATE.to);
   const heading = node('div', 'cx-explore-heading');
   heading.appendChild(node('h2', '', ProofExperience.L('Explore community actions', '探索社区行动')));
   const modes = node('div', 'cx-view-modes');
@@ -61,6 +68,9 @@ function buildMap() {
     modes.appendChild(choice);
   });
   heading.appendChild(modes);
+  heading.appendChild(
+    btn(ProofExperience.L('Share view', '分享视图'), () => ProofTools.shareMap(MAP_STATE, MAP_VIEW_MODE)),
+  );
   sec.appendChild(heading);
   const searchSlot = node('div', 'cx-explore-search');
   sec.appendChild(searchSlot);
@@ -121,34 +131,30 @@ function buildMap() {
   countries.forEach((c) => option(countrySelect, c.name, mapCountryName(c)));
   const citySelect = node('select', 'txt-in');
   citySelect.id = 'map-city-filter';
-  const dateInput = node('input', 'txt-in');
-  dateInput.type = 'date';
-  dateInput.id = 'map-date-filter';
+  filters.append(label(t('map.rank.col.country'), countrySelect), label(t('map.city.filter'), citySelect));
   filters.append(
-    label(t('map.rank.col.country'), countrySelect),
-    label(t('map.city.filter'), citySelect),
-    label(t('mapx.date'), dateInput),
-  );
-  filters.append(
-    btn(t('mapx.allDates'), () => {
-      MAP_STATE.date = null;
-      render();
-    }),
     btn(t('mapx.reset'), () => {
-      MAP_STATE = { country: null, city: null, date: null, action: null };
+      cancelPlayback();
+      MAP_STATE = { country: null, city: null, date: null, from: null, to: null, action: null };
       MAP_VIEW = world();
       search.value = '';
       render();
     }),
   );
+  const periodControls = ProofTools.periodControls(
+    MAP_STATE,
+    (period) => {
+      cancelPlayback();
+      Object.assign(MAP_STATE, period);
+      render();
+    },
+    { id: 'map-date-filter', exactLabel: t('mapx.date') },
+  );
+  explorer.body.appendChild(periodControls.root);
   countrySelect.addEventListener('change', () => selectLocation(countrySelect.value || null, null));
   citySelect.addEventListener('change', () => {
     const i = citySelect.value === '' ? null : +citySelect.value;
     selectLocation(i == null ? MAP_STATE.country : PROOF.city(i).country.en, i);
-  });
-  dateInput.addEventListener('change', () => {
-    MAP_STATE.date = dateInput.value || null;
-    render();
   });
   const context = node('div', 'mapx-context');
   context.setAttribute('role', 'status');
@@ -157,6 +163,66 @@ function buildMap() {
   const crumbs = node('div', 'hier-crumb');
   explorer.body.appendChild(crumbs);
   const dateStrip = node('div', 'dstrip mapx-dates');
+  const playback = node('div', 'pt-playback');
+  let playbackTimer = null,
+    playbackDays = [],
+    playbackIndex = -1,
+    replayPeriod = null;
+  const play = btn(ProofExperience.L('Play timeline', '播放时间线'), () => {
+    if (playbackTimer) {
+      pausePlayback();
+      return;
+    }
+    if (!playbackDays.length) {
+      replayPeriod = ProofPeriod.clean(MAP_STATE);
+      playbackDays = [
+        ...new Set(
+          PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null, ProofPeriod.clean(MAP_STATE))
+            .filter((s) => !MAP_STATE.action || s.action === MAP_STATE.action)
+            .map((s) => PROOF.actionDate(s)),
+        ),
+      ].sort();
+      playbackIndex = -1;
+    }
+    if (playbackIndex >= playbackDays.length - 1) playbackIndex = -1;
+    if (!playbackDays.length) {
+      playbackStatus.textContent = ProofExperience.L('No recorded days to replay.', '没有可播放的记录日期。');
+      return;
+    }
+    function tick() {
+      if (!sec.classList.contains('active') || document.hidden || !sec.isConnected) {
+        pausePlayback();
+        return;
+      }
+      playbackIndex++;
+      Object.assign(MAP_STATE, { date: playbackDays[playbackIndex], from: null, to: null });
+      if (playbackIndex === playbackDays.length - 1) pausePlayback();
+      render();
+    }
+    playbackTimer = setInterval(tick, +speed.value);
+    tick();
+    updatePlayback();
+  });
+  const restorePeriod = btn(ProofExperience.L('Restore selected period', '恢复所选时段'), () => {
+    const period = replayPeriod;
+    cancelPlayback();
+    Object.assign(MAP_STATE, period || ProofPeriod.clean({}));
+    render();
+  });
+  restorePeriod.hidden = true;
+  const speed = node('select', 'txt-in');
+  [
+    ['2000', '0.5×'],
+    ['1000', '1×'],
+    ['500', '2×'],
+  ].forEach(([value, title]) => option(speed, value, title));
+  speed.value = '1000';
+  speed.setAttribute('aria-label', ProofExperience.L('Timeline speed', '时间线速度'));
+  speed.addEventListener('change', pausePlayback);
+  const playbackStatus = node('span', 'evidence-note');
+  playbackStatus.setAttribute('role', 'status');
+  playback.append(play, restorePeriod, speed, playbackStatus);
+  explorer.body.appendChild(playback);
   explorer.body.appendChild(dateStrip);
   const actionMix = node('div', 'cx-action-mix');
   explorer.body.appendChild(actionMix);
@@ -172,7 +238,35 @@ function buildMap() {
     scoped = [],
     suppressClick = false;
 
+  function updatePlayback() {
+    play.textContent = playbackTimer
+      ? ProofExperience.L('Pause timeline', '暂停时间线')
+      : ProofExperience.L('Play timeline', '播放时间线');
+    play.setAttribute('aria-pressed', String(!!playbackTimer));
+    restorePeriod.hidden = !replayPeriod;
+    playbackStatus.textContent = replayPeriod
+      ? playbackIndex + 1 + ' / ' + playbackDays.length + ' · ' + periodLabel()
+      : ProofExperience.L(
+          'Replay recorded days within the selected period. Pause keeps the displayed day.',
+          '播放所选时段内有记录的日期；暂停后保留当前日期。',
+        );
+  }
+  function pausePlayback() {
+    clearInterval(playbackTimer);
+    playbackTimer = null;
+    updatePlayback();
+  }
+  function cancelPlayback() {
+    pausePlayback();
+    playbackDays = [];
+    playbackIndex = -1;
+    replayPeriod = null;
+    updatePlayback();
+  }
+  MAP_PLAYER = { pause: pausePlayback, dispose: () => clearInterval(playbackTimer) };
+
   function selectLocation(country, city) {
+    cancelPlayback();
     MAP_STATE.country = country;
     MAP_STATE.city = city;
     search.value = country ? scopeLabel() : '';
@@ -222,11 +316,8 @@ function buildMap() {
     search.setAttribute('aria-expanded', 'true');
     if (!matches.length) results.appendChild(node('p', '', t('mapx.noSearch')));
     matches.forEach((match) => {
-      const b = btn(
-        (match.city == null ? '🌐 ' : '📍 ') + match.text,
-        () => selectLocation(match.country, match.city),
-        'mapx-search-option',
-      );
+      const b = btn(match.text, () => selectLocation(match.country, match.city), 'mapx-search-option');
+      b.prepend(ProofTools.icon(match.city == null ? 'map' : 'location'));
       b.setAttribute('role', 'option');
       b.setAttribute('aria-selected', 'false');
       results.appendChild(b);
@@ -350,8 +441,8 @@ function buildMap() {
       const p = svgn('path', {
         d: c.d,
         fill: active ? (st.verified ? fill(st.verified) : '#fff2cf') : '#eef1f4',
-        stroke: selected ? '#172f48' : MAP_STATE.date && active ? '#b66a05' : '#cdd4dc',
-        'stroke-width': selected ? 2 : MAP_STATE.date && active ? 1.4 : 0.5,
+        stroke: selected ? '#172f48' : hasPeriod() && active ? '#b66a05' : '#cdd4dc',
+        'stroke-width': selected ? 2 : hasPeriod() && active ? 1.4 : 0.5,
         'vector-effect': 'non-scaling-stroke',
       });
       p.classList.add('map-path');
@@ -487,7 +578,7 @@ function buildMap() {
       legend.appendChild(sw);
     });
     legend.appendChild(node('span', '', t('map.pin.hint')));
-    if (MAP_STATE.date) legend.appendChild(node('b', 'mapx-date-key', t('mapx.highlight')));
+    if (hasPeriod()) legend.appendChild(node('b', 'mapx-date-key', t('mapx.highlight')));
   }
   function statTable(root, rows, choose, compact = false) {
     if (!rows.length) {
@@ -544,8 +635,7 @@ function buildMap() {
   }
   function renderRanking() {
     rankCard.body.replaceChildren();
-    rankCard.root.querySelector('.card-sub').textContent =
-      (MAP_STATE.date || t('mapx.allDates')) + ' · ' + t('mapx.rankHint');
+    rankCard.root.querySelector('.card-sub').textContent = periodLabel() + ' · ' + t('mapx.rankHint');
     statTable(rankCard.body, PROOF.countryRows(dateSubs), (r) => selectLocation(r.key, null), true);
     rankCard.body.querySelectorAll('tr[data-key]').forEach((r) => {
       if (r.dataset.key === MAP_STATE.country) r.classList.add('mapx-selected-row');
@@ -568,13 +658,14 @@ function buildMap() {
         const b = btn(
           '',
           () => {
-            MAP_STATE.date = MAP_STATE.date === d ? null : d;
+            cancelPlayback();
+            Object.assign(MAP_STATE, { date: MAP_STATE.date === d ? null : d, from: null, to: null });
             render();
           },
-          'dbar' + (MAP_STATE.date === d ? ' sel' : ''),
+          'dbar' + (hasPeriod() && ProofPeriod.matches(d, MAP_STATE) ? ' sel' : ''),
         );
         b.setAttribute('aria-label', d + ' · ' + days[d] + ' ' + t('map.kpi.total'));
-        b.setAttribute('aria-pressed', String(MAP_STATE.date === d));
+        b.setAttribute('aria-pressed', String(hasPeriod() && ProofPeriod.matches(d, MAP_STATE)));
         const bar = node('span', 'bar'),
           seg = node('span', 'seg');
         seg.style.height = (days[d] / max) * 64 + 'px';
@@ -646,6 +737,7 @@ function buildMap() {
     const all = btn(
       ProofExperience.L('All action types', '所有行动类型'),
       () => {
+        cancelPlayback();
         MAP_STATE.action = null;
         render();
       },
@@ -659,6 +751,7 @@ function buildMap() {
       const bar = btn(
         '',
         () => {
+          cancelPlayback();
           MAP_STATE.action = MAP_STATE.action === action.key ? null : action.key;
           render();
         },
@@ -743,13 +836,7 @@ function buildMap() {
       node(
         'p',
         'mapx-coverage-scope',
-        scopeLabel() +
-          ' · ' +
-          (MAP_STATE.date || t('mapx.allDates')) +
-          ' · ' +
-          report.verified +
-          ' ' +
-          t('map.kpi.verified'),
+        scopeLabel() + ' · ' + periodLabel() + ' · ' + report.verified + ' ' + t('map.kpi.verified'),
       ),
     );
     if (report.verified < 4)
@@ -760,7 +847,11 @@ function buildMap() {
     coverage.body.appendChild(grid);
     report.groups.forEach((group) => {
       const box = node('div', 'mapx-coverage-card');
-      box.appendChild(node('h4', '', group.icon + ' ' + t('mapx.' + group.key)));
+      const heading = node('h4', '', t('mapx.' + group.key));
+      heading.prepend(
+        ProofTools.icon({ environment: 'afforest', energy: 'solar', buildings: 'retrofit' }[group.key]),
+      );
+      box.appendChild(heading);
       group.actions.forEach((a) => {
         const item = node('div', 'mapx-coverage-action');
         item.dataset.action = a.key;
@@ -813,9 +904,9 @@ function buildMap() {
     );
   }
   function render() {
-    scopedBase = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null, MAP_STATE.date);
+    scopedBase = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null, ProofPeriod.clean(MAP_STATE));
     scoped = scopedBase.filter((s) => !MAP_STATE.action || s.action === MAP_STATE.action);
-    dateSubs = PROOF.scopeSubs(null, null, null, MAP_STATE.date).filter(
+    dateSubs = PROOF.scopeSubs(null, null, null, ProofPeriod.clean(MAP_STATE)).filter(
       (s) => !MAP_STATE.action || s.action === MAP_STATE.action,
     );
     layout.hidden = MAP_VIEW_MODE !== 'map-gallery';
@@ -831,11 +922,12 @@ function buildMap() {
         option(citySelect, String(i), lb(c) + (MAP_STATE.country ? '' : ' · ' + lb(c.country)));
     });
     citySelect.value = MAP_STATE.city == null ? '' : String(MAP_STATE.city);
-    dateInput.value = MAP_STATE.date || '';
+    periodControls.sync(MAP_STATE);
+    updatePlayback();
     context.textContent =
       scopeLabel() +
       ' · ' +
-      (MAP_STATE.date || t('mapx.allDates')) +
+      periodLabel() +
       ' · ' +
       scoped.length +
       ' ' +
@@ -871,7 +963,7 @@ function buildMap() {
         statTile({
           label: t(key),
           value,
-          delta: scopeLabel() + ' · ' + (MAP_STATE.date || t('mapx.allDates')),
+          delta: scopeLabel() + ' · ' + periodLabel(),
           deltaCls: 'plain',
         }),
       ),
@@ -885,6 +977,7 @@ function buildMap() {
     renderCoverage();
   }
   window.__renderMap = () => {
+    cancelPlayback();
     render();
     if (MAP_STATE.country) focusLocation();
   };
