@@ -1,6 +1,7 @@
 'use strict';
-let MAP_STATE = { country: null, city: null, date: null };
+let MAP_STATE = { country: null, city: null, date: null, action: null };
 let MAP_VIEW = { x: -180, y: -85, w: 360, h: 170 };
+let MAP_VIEW_MODE = 'map-gallery';
 
 function buildMap() {
   const sec = $('#tab-map');
@@ -41,6 +42,28 @@ function buildMap() {
       : MAP_STATE.country
         ? countryLabel(MAP_STATE.country)
         : t('an.hier.global');
+  const heading = node('div', 'cx-explore-heading');
+  heading.appendChild(node('h2', '', ProofExperience.L('Explore community actions', '探索社区行动')));
+  const modes = node('div', 'cx-view-modes');
+  modes.setAttribute('role', 'group');
+  modes.setAttribute('aria-label', ProofExperience.L('Explore view', '探索视图'));
+  [
+    ['map-gallery', ProofExperience.L('Map + gallery', '地图 + 图库')],
+    ['gallery', ProofExperience.L('Gallery', '图库')],
+    ['table', ProofExperience.L('Table', '表格')],
+  ].forEach(([mode, title]) => {
+    const choice = btn(title, () => {
+      MAP_VIEW_MODE = mode;
+      render();
+      if (mode === 'map-gallery') focusLocation();
+    });
+    choice.dataset.view = mode;
+    modes.appendChild(choice);
+  });
+  heading.appendChild(modes);
+  sec.appendChild(heading);
+  const searchSlot = node('div', 'cx-explore-search');
+  sec.appendChild(searchSlot);
   const kpis = node('div', 'kpi-grid');
   kpis.id = 'map-kpis';
   sec.appendChild(kpis);
@@ -52,7 +75,7 @@ function buildMap() {
   const tools = node('div', 'mapx-tools');
   mapCard.body.appendChild(tools);
   const searchBox = node('div', 'mapx-search');
-  tools.appendChild(searchBox);
+  searchSlot.appendChild(searchBox);
   const search = node('input', 'txt-in');
   search.type = 'search';
   search.placeholder = t('mapx.search');
@@ -112,7 +135,7 @@ function buildMap() {
       render();
     }),
     btn(t('mapx.reset'), () => {
-      MAP_STATE = { country: null, city: null, date: null };
+      MAP_STATE = { country: null, city: null, date: null, action: null };
       MAP_VIEW = world();
       search.value = '';
       render();
@@ -135,14 +158,17 @@ function buildMap() {
   explorer.body.appendChild(crumbs);
   const dateStrip = node('div', 'dstrip mapx-dates');
   explorer.body.appendChild(dateStrip);
+  const actionMix = node('div', 'cx-action-mix');
+  explorer.body.appendChild(actionMix);
   const overview = node('div', 'mapx-overview');
-  explorer.body.appendChild(overview);
   const actions = node('div', 'mapx-action-list');
   explorer.body.appendChild(actions);
+  explorer.body.appendChild(overview);
   const coverage = card(sec, t('mapx.coverage'), t('mapx.coverageHint'));
   coverage.root.id = 'map-coverage';
   let svg,
     dateSubs = [],
+    scopedBase = [],
     scoped = [],
     suppressClick = false;
 
@@ -271,6 +297,7 @@ function buildMap() {
     applyView();
   }
   function focusLocation() {
+    if (layout.hidden) return;
     if (MAP_STATE.city != null) {
       const c = PROOF.city(MAP_STATE.city);
       MAP_VIEW = { x: c.lon - 10, y: -c.lat - 170 / 36, w: 20, h: 170 / 18 };
@@ -356,6 +383,10 @@ function buildMap() {
         );
       });
       p.addEventListener('mouseleave', hideTip);
+      p.addEventListener('mouseenter', () => highlightCountry(c.name));
+      p.addEventListener('mouseleave', () => highlightCity(null));
+      p.addEventListener('focus', () => highlightCountry(c.name));
+      p.addEventListener('blur', () => highlightCity(null));
       svg.appendChild(p);
     });
     PROOF.cities.forEach((c, i) => {
@@ -393,6 +424,10 @@ function buildMap() {
           ]);
       });
       g.addEventListener('mouseleave', hideTip);
+      g.addEventListener('mouseenter', () => highlightCity(i));
+      g.addEventListener('mouseleave', () => highlightCity(null));
+      g.addEventListener('focus', () => highlightCity(i));
+      g.addEventListener('blur', () => highlightCity(null));
       svg.appendChild(g);
       if (selected) {
         const text = svgn('text', {
@@ -518,7 +553,9 @@ function buildMap() {
   }
   function renderDates() {
     dateStrip.replaceChildren();
-    const geo = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null),
+    const geo = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null).filter(
+        (s) => !MAP_STATE.action || s.action === MAP_STATE.action,
+      ),
       days = {};
     geo.forEach((s) => {
       const k = PROOF.actionDate(s);
@@ -579,48 +616,128 @@ function buildMap() {
       else selectLocation(r.key, null);
     });
   }
+  function highlightCity(city) {
+    const country = city == null ? null : PROOF.city(city).country.en;
+    mapHost
+      .querySelectorAll('.map-pin')
+      .forEach((pin) => pin.classList.toggle('is-linked', city != null && +pin.dataset.city === city));
+    mapHost
+      .querySelectorAll('.map-path')
+      .forEach((path) =>
+        path.classList.toggle('is-linked', country != null && path.dataset.country === country),
+      );
+    actions
+      .querySelectorAll('[data-submission]')
+      .forEach((card) => card.classList.toggle('is-linked', city != null && +card.dataset.city === city));
+  }
+  function highlightCountry(country) {
+    mapHost
+      .querySelectorAll('.map-path')
+      .forEach((path) => path.classList.toggle('is-linked', path.dataset.country === country));
+    actions
+      .querySelectorAll('[data-submission]')
+      .forEach((card) =>
+        card.classList.toggle('is-linked', PROOF.city(+card.dataset.city).country.en === country),
+      );
+  }
+  function renderActionMix() {
+    actionMix.replaceChildren();
+    actionMix.appendChild(node('h4', '', ProofExperience.L('Filter by action type', '按行动类型筛选')));
+    const all = btn(
+      ProofExperience.L('All action types', '所有行动类型'),
+      () => {
+        MAP_STATE.action = null;
+        render();
+      },
+      'chip' + (!MAP_STATE.action ? ' active' : ''),
+    );
+    actionMix.appendChild(all);
+    const chart = node('div', 'cx-mix-bars');
+    const max = Math.max(1, ...PROOF.actions.map((a) => scopedBase.filter((s) => s.action === a.key).length));
+    PROOF.actions.forEach((action) => {
+      const count = scopedBase.filter((s) => s.action === action.key).length;
+      const bar = btn(
+        '',
+        () => {
+          MAP_STATE.action = MAP_STATE.action === action.key ? null : action.key;
+          render();
+        },
+        'cx-mix-bar',
+      );
+      bar.dataset.actionFilter = action.key;
+      bar.setAttribute('aria-pressed', String(MAP_STATE.action === action.key));
+      bar.setAttribute('aria-label', t('act.' + action.key) + ' · ' + count);
+      const track = node('span', 'cx-mix-track'),
+        fill = node('span');
+      fill.style.width = (count / max) * 100 + '%';
+      track.appendChild(fill);
+      bar.append(node('span', '', t('act.' + action.key)), track, node('b', '', String(count)));
+      chart.appendChild(bar);
+    });
+    actionMix.appendChild(chart);
+  }
   function renderActions() {
     actions.replaceChildren(node('h4', '', t('map.list.title') + ' · ' + scoped.length));
     if (!scoped.length) {
       empty(actions);
       return;
     }
-    scoped
-      .slice()
-      .sort((a, b) => b.time - a.time)
-      .forEach((s) => {
-        const row = node('button', 'feed-row mapx-project');
-        row.type = 'button';
+    const records = scoped.slice().sort((a, b) => b.time - a.time);
+    if (MAP_VIEW_MODE !== 'table') {
+      const gallery = node('div', 'cx-gallery');
+      records.forEach((s) => {
+        const card = ProofExperience.actionCard(
+          s,
+          () => ProofExperience.openStory(s.projectId || 'record:' + s.id),
+          highlightCity,
+        );
+        card.classList.add('mapx-project');
+        gallery.appendChild(card);
+      });
+      actions.appendChild(gallery);
+    } else {
+      const wrap = node('div', 'chart-table'),
+        table = node('table'),
+        head = node('thead'),
+        row = node('tr');
+      [
+        ProofExperience.L('Action record', '行动记录'),
+        t('mapx.location'),
+        t('mapx.date'),
+        ProofExperience.L('Evidence stage', '证据阶段'),
+        t('map.kpi.avg'),
+      ].forEach((title) => row.appendChild(node('th', '', title)));
+      head.appendChild(row);
+      table.appendChild(head);
+      const body = node('tbody');
+      records.forEach((s) => {
+        const row = node('tr', 'mapx-project');
         row.dataset.submission = s.id;
-        row.setAttribute('aria-label', s.id + ' · ' + t('act.' + s.action));
-        const info = node('div', 'feed-info'),
-          top = node('div', 'feed-top');
-        top.append(node('b', '', s.id), lvBadge(s.status), actTag(s.action));
-        if (s.org) top.appendChild(orgTag(s.org));
-        info.append(
-          top,
-          node(
-            'div',
-            'feed-meta',
-            s.submitter +
-              ' · ' +
-              lb(PROOF.city(s.city)) +
-              ' · ' +
-              PROOF.actionDate(s) +
-              ' · ' +
-              t('qc.score') +
-              ' ' +
-              s.score,
+        row.dataset.city = s.city;
+        const name = node('td');
+        name.appendChild(
+          btn(
+            s.id + ' · ' + t('act.' + s.action),
+            () => ProofExperience.openStory(s.projectId || 'record:' + s.id),
+            'link-btn',
           ),
         );
-        row.append(photoThumb(s, 56), info, node('span', 'mapx-chevron', '›'));
-        row.addEventListener('click', () => openDrawer(s.id));
-        actions.appendChild(row);
+        row.append(name, node('td', '', lb(PROOF.city(s.city))), node('td', '', PROOF.actionDate(s)));
+        const stage = node('td');
+        stage.append(lvBadge(s.status), ProofExperience.decisionBadge(s));
+        row.append(stage, node('td', '', String(s.score)));
+        row.addEventListener('mouseenter', () => highlightCity(s.city));
+        row.addEventListener('mouseleave', () => highlightCity(null));
+        body.appendChild(row);
       });
+      table.appendChild(body);
+      wrap.appendChild(table);
+      actions.appendChild(wrap);
+    }
   }
   function renderCoverage() {
     coverage.body.replaceChildren();
-    const report = PROOF.actionCoverage(scoped);
+    const report = PROOF.actionCoverage(scopedBase);
     coverage.body.appendChild(node('p', 'mapx-integrity', t('mapx.caution')));
     coverage.body.appendChild(
       node(
@@ -672,15 +789,40 @@ function buildMap() {
         );
         if (report.verified && (!a.verified || (report.verified >= 4 && a.share < 10)))
           item.appendChild(node('p', 'mapx-suggestion', t('mapx.suggest.' + a.key)));
+        item.appendChild(
+          btn(
+            ProofExperience.L('Explore this activity →', '探索此活动 →'),
+            () => ProofExperience.starter(a.key, { country: MAP_STATE.country, city: MAP_STATE.city }),
+            'link-btn cx-starter-link',
+          ),
+        );
         box.appendChild(item);
       });
       grid.appendChild(box);
     });
     coverage.body.appendChild(node('p', 'evidence-note', t('mapx.ratios')));
+    coverage.body.appendChild(
+      node(
+        'p',
+        'evidence-note',
+        ProofExperience.L(
+          'Coverage includes all action types for this place and date. The action-type filter applies to the activity results, map and ranking.',
+          '覆盖统计包含此地点和日期的所有行动类型。行动类型筛选用于活动结果、地图和排行。',
+        ),
+      ),
+    );
   }
   function render() {
-    dateSubs = PROOF.scopeSubs(null, null, null, MAP_STATE.date);
-    scoped = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null, MAP_STATE.date);
+    scopedBase = PROOF.scopeSubs(MAP_STATE.country, MAP_STATE.city, null, MAP_STATE.date);
+    scoped = scopedBase.filter((s) => !MAP_STATE.action || s.action === MAP_STATE.action);
+    dateSubs = PROOF.scopeSubs(null, null, null, MAP_STATE.date).filter(
+      (s) => !MAP_STATE.action || s.action === MAP_STATE.action,
+    );
+    layout.hidden = MAP_VIEW_MODE !== 'map-gallery';
+    modes.querySelectorAll('[data-view]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.view === MAP_VIEW_MODE));
+    });
+    sec.dataset.view = MAP_VIEW_MODE;
     countrySelect.value = MAP_STATE.country || '';
     citySelect.replaceChildren();
     option(citySelect, '', t('map.city.all'));
@@ -697,7 +839,8 @@ function buildMap() {
       ' · ' +
       scoped.length +
       ' ' +
-      t('map.kpi.total');
+      t('map.kpi.total') +
+      (MAP_STATE.action ? ' · ' + t('act.' + MAP_STATE.action) : '');
     crumbs.replaceChildren(
       btn(
         t('an.hier.global'),
@@ -738,6 +881,7 @@ function buildMap() {
     renderDates();
     renderOverview();
     renderActions();
+    renderActionMix();
     renderCoverage();
   }
   window.__renderMap = () => {

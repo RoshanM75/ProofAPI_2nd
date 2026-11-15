@@ -1,8 +1,9 @@
 'use strict';
 // Registered only by the explicit model opt-in. No service worker on default path.
-const SHELL_CACHE = 'proof-offline-shell-v2';
+const SHELL_CACHE = 'proof-offline-shell-v3';
 const FILES = [
-  './', './index.html', './css/style.css', './js/data.js', './js/photos.js',
+  './', './index.html', './css/style.css', './css/experience.css', './js/data.js', './js/photos.js',
+  './js/community-data.js', './js/experience.js',
   './js/map-data.js', './js/map-explorer.js', './js/i18n.js', './js/charts.js', './js/api.js', './js/app.js',
   './js/model-config.js', './js/evidence.js', './js/model-worker.js', './js/ndvi-data.js',
   './assets/data/landsat-ndvi.json', './manifest.webmanifest', './assets/icon-192.png',
@@ -41,7 +42,7 @@ self.addEventListener('fetch', event => {
     try { return await fetch(event.request); }
     catch(error){
       // A service-worker update can arrive before this version is prepared.
-      // Retain the previous complete offline app until the next opt-in caches v2.
+      // Retain the previous complete offline app until this version is prepared.
       for(const name of await caches.keys()){
         if(name !== SHELL_CACHE && name.startsWith('proof-offline-shell-')){
           const previous = await (await caches.open(name)).match(key, { ignoreSearch: true });
